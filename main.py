@@ -1,7 +1,7 @@
 """Main entry point for SPK pose detection application"""
 
 import sys
-from app.bodyModel.test import main
+from app.bodyModel.pose_detector import main
 
 if __name__ == "__main__":
     try:

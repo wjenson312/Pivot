@@ -10,7 +10,7 @@ def main():
                         min_detection_confidence=0.5,
                         min_tracking_confidence=0.5)
 
-    cap = cv2.VideoCapture('your_video.mp4')  # or 0 for webcam
+    cap = cv2.VideoCapture(0)  # 0 for webcam, or provide video file path
 
     while cap.isOpened():
         ret, frame = cap.read()
