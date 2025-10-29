@@ -12,9 +12,19 @@ def main():
 
     cap = cv2.VideoCapture(0)  # 0 for webcam, or provide video file path
 
+    if not cap.isOpened():
+        print("ERROR: Could not open camera!")
+        print("Please check:")
+        print("1. Camera permissions in System Settings → Privacy & Security → Camera")
+        print("2. That your camera is not being used by another application")
+        return
+
+    print("Camera opened successfully! Press 'q' to quit.")
+
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
+            print("ERROR: Failed to read frame from camera")
             break
 
         # Convert BGR to RGB
