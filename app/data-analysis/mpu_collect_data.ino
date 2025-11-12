@@ -6,7 +6,7 @@ MPU6050 mpu(Wire);
 long timer = 0;
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(250000);  // Match Python baud rate for faster data transfer
   while(!Serial);
   delay(2000);
 
@@ -27,18 +27,24 @@ void setup() {
 void loop() {
   mpu.update();
 
-  if(millis() - timer > 2){ // print data every 2 ms (500Hz refresh rate)
-    Serial.print(F("ACCELERO  X: "));Serial.print(mpu.getAccX());
-    Serial.print("\tY: ");Serial.print(mpu.getAccY());
-    Serial.print("\tZ: ");Serial.println(mpu.getAccZ());
-    
-    Serial.print(F("ANGLE     X: "));Serial.print(mpu.getAngleX());
-    Serial.print("\tY: ");Serial.print(mpu.getAngleY());
-    Serial.print("\tZ: ");Serial.println(mpu.getAngleZ());
+  if(millis() - timer > 10){ // print data every 10 ms (100Hz refresh rate)
+    // Send single compact line: timestamp ax ay az gx gy gz
+    unsigned long ts = micros();
+    Serial.print(ts);
+    Serial.print(" ");
+    Serial.print(mpu.getAccX(), 3);
+    Serial.print(" ");
+    Serial.print(mpu.getAccY(), 3);
+    Serial.print(" ");
+    Serial.print(mpu.getAccZ(), 3);
+    Serial.print(" ");
+    Serial.print(mpu.getAngleX(), 2);
+    Serial.print(" ");
+    Serial.print(mpu.getAngleY(), 2);
+    Serial.print(" ");
+    Serial.println(mpu.getAngleZ(), 2);
     timer = millis();
   }
 
 }
-
-break
 
