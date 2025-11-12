@@ -4,7 +4,6 @@
 import serial
 import csv
 import re
-import os
 from datetime import datetime
 
 port = '/dev/cu.usbmodem11201'  # Change to your Arduino port
@@ -41,8 +40,6 @@ data_pattern = re.compile(r'(\d+)\s+([-+]?\d+\.?\d*)\s+([-+]?\d+\.?\d*)\s+([-+]?
 
 sample_count = 0
 arduino_start_time = None
-last_flush = time.time()
-flush_interval = 0.5  # flush every 0.5 seconds
 
 try:
     print("Logging data (Ctrl+C to stop)...")
@@ -68,19 +65,10 @@ try:
             # Write to CSV
             csv_writer.writerow([t, ax_val, ay_val, az_val, gx_val, gy_val, gz_val])
             sample_count += 1
-            
-            # Periodically flush to disk
-            if time.time() - last_flush > flush_interval:
-                csv_file.flush()
-                os.fsync(csv_file.fileno())
-                last_flush = time.time()
-                print(f"Logged {sample_count} samples...")
 
 except KeyboardInterrupt:
     print(f'\nStopping... Total samples logged: {sample_count}')
 finally:
-    csv_file.flush()
-    os.fsync(csv_file.fileno())
     csv_file.close()
     ser.close()
     print(f"Data saved to: {csv_filename}")
