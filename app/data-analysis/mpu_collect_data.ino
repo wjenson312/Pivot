@@ -7,6 +7,9 @@ long timer = 0;
 
 void setup() {
   Serial.begin(9600);
+  while(!Serial);
+  delay(2000);
+
   Wire.begin();
   
   byte status = mpu.begin();
@@ -24,24 +27,18 @@ void setup() {
 void loop() {
   mpu.update();
 
-  if(millis() - timer > 1000){ // print data every second
+  if(millis() - timer > 2){ // print data every 2 ms (500Hz refresh rate)
     Serial.print(F("ACCELERO  X: "));Serial.print(mpu.getAccX());
     Serial.print("\tY: ");Serial.print(mpu.getAccY());
     Serial.print("\tZ: ");Serial.println(mpu.getAccZ());
-  
-    Serial.print(F("GYRO      X: "));Serial.print(mpu.getGyroX());
-    Serial.print("\tY: ");Serial.print(mpu.getGyroY());
-    Serial.print("\tZ: ");Serial.println(mpu.getGyroZ());
-  
-    Serial.print(F("ACC ANGLE X: "));Serial.print(mpu.getAccAngleX());
-    Serial.print("\tY: ");Serial.println(mpu.getAccAngleY());
     
     Serial.print(F("ANGLE     X: "));Serial.print(mpu.getAngleX());
     Serial.print("\tY: ");Serial.print(mpu.getAngleY());
     Serial.print("\tZ: ");Serial.println(mpu.getAngleZ());
-    Serial.println(F("=====================================================\n"));
     timer = millis();
   }
 
 }
+
+break
 
