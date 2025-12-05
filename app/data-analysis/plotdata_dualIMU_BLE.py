@@ -21,6 +21,7 @@ from bleak import BleakClient, BleakScanner
 DEVICE_NAME = "MKR1010_MPU"
 SERVICE_UUID = "180D"
 CHARACTERISTIC_UUID = "2A37"
+TARGET_ADDRESS = "4D7B2416-F159-E284-3A2A-34D5A2603212"
 
 # Plotting / data config
 MAX_POINTS = 1000
@@ -102,34 +103,50 @@ def setup_plot():
 
 
 async def main():
-    global first_ts, count, last_status
 
     print("Scanning for BLE devices...")
     devices = await BleakScanner.discover()
-    target = next((d for d in devices if d.name and DEVICE_NAME in d.name), None)
-    if target is None:
-        print(f"Device '{DEVICE_NAME}' not found.")
+
+    found = False
+
+    for dev in devices:
+        print(f"Found BLE device: {dev.name} | {dev.address}")
+
+        if dev.address == TARGET_ADDRESS:
+            found = True
+            break
+
+    if not found:
+        print(f"\n❌ Device with address {TARGET_ADDRESS} not found.")
+        print("   → Turn device off/on")
+        print("   → Turn Bluetooth off/on")
+        print("   → Make sure no other program is connected")
         return
 
-    print(f"Connecting to {target.name} [{target.address}]...")
-    async with BleakClient(target.address) as client:
-        print("Connected.")
+    print(f"\n🔗 Connecting to device at {TARGET_ADDRESS}...")
+
+    async with BleakClient(TARGET_ADDRESS) as client:
+        print("✅ Connected!")
+        # Your notify + plotting code continues as-is below
 
         fig, ax_acc1, ax_gyro1, ax_acc2, ax_gyro2, lines_acc1, lines_gyr1, lines_acc2, lines_gyr2 = setup_plot()
 
-        def handle_notification(sender, data):
+        def handle_notification(sender, payload):
             global count, last_status, first_ts
 
-            line = data.decode('utf-8').strip()
+            # Decode BLE bytes to string
+            line = payload.decode('utf-8').strip()
             ts, vals = parse_line(line)
             if ts is None:
                 return
 
+            # Establish time zero
             if first_ts is None:
                 first_ts = ts
             t_s = (ts - first_ts) / 1_000_000.0
             xs.append(t_s)
 
+            # Store IMU1 values
             data['imu1_ax'].append(vals[0])
             data['imu1_ay'].append(vals[1])
             data['imu1_az'].append(vals[2])
@@ -137,6 +154,7 @@ async def main():
             data['imu1_gy'].append(vals[4])
             data['imu1_gz'].append(vals[5])
 
+            # Store IMU2 values
             data['imu2_ax'].append(vals[6])
             data['imu2_ay'].append(vals[7])
             data['imu2_az'].append(vals[8])
@@ -146,25 +164,31 @@ async def main():
 
             count += 1
 
+            # Update plot occasionally for efficiency
             if count % UPDATE_EVERY == 0 and len(xs) > 0:
                 x = list(xs)
+
                 # IMU1 accel
                 for i, key in enumerate(['imu1_ax','imu1_ay','imu1_az']):
                     y = list(data[key])
                     lines_acc1[i].set_data(x[-len(y):], y)
+
                 # IMU1 gyro
                 for i, key in enumerate(['imu1_gx','imu1_gy','imu1_gz']):
                     y = list(data[key])
                     lines_gyr1[i].set_data(x[-len(y):], y)
+
                 # IMU2 accel
                 for i, key in enumerate(['imu2_ax','imu2_ay','imu2_az']):
                     y = list(data[key])
                     lines_acc2[i].set_data(x[-len(y):], y)
+
                 # IMU2 gyro
                 for i, key in enumerate(['imu2_gx','imu2_gy','imu2_gz']):
                     y = list(data[key])
                     lines_gyr2[i].set_data(x[-len(y):], y)
 
+                # Refresh plot
                 for ax in (ax_acc1, ax_gyro1, ax_acc2, ax_gyro2):
                     ax.relim()
                     ax.autoscale_view(True, True, True)
@@ -172,7 +196,8 @@ async def main():
                 fig.canvas.draw_idle()
                 plt.pause(0.001)
 
-            if time.time() - last_status > 1.0:
+            # Status print every second
+            if time.time() - last_status > 1:
                 print(f"Samples: {count}, buffer: {len(xs)}")
                 last_status = time.time()
 
