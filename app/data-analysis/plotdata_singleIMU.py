@@ -5,7 +5,7 @@ import time
 import matplotlib.pyplot as plt
 import re
 
-port = '/dev/cu.usbmodem11201'  # Change to your Arduino port before running test
+port = '/dev/cu.usbmodem101'  # Change to your Arduino port before running test
 baud_rate = 250000 # Increased for 500Hz sensor data (was 9600)
 max_points = 200
 update_every_n = 10  # Only redraw plot every N samples for better performance at 500Hz
