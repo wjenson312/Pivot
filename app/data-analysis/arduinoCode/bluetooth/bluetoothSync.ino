@@ -55,12 +55,22 @@ unsigned long buttonPressMs = 0;
 bool buttonHeld = false;
 
 // =======================
+// NON-BLOCKING FILE TRANSFER
+// =======================
+File xferFile;
+bool xferActive = false;
+File listRoot;
+bool listActive = false;
+unsigned long lastXferMs = 0;
+
+// =======================
 // MULTIPLEXER
 // =======================
 void tcaSelect(uint8_t ch) {
   Wire.beginTransmission(TCA_ADDR);
   Wire.write(1 << ch);
   Wire.endTransmission();
+  delayMicroseconds(100);  // let channel switch settle before next I2C transaction
 }
 
 // =======================
@@ -79,25 +89,36 @@ void handleControlWrite(BLEDevice central, BLECharacteristic characteristic) {
   String cmd = characteristic.value();
   cmd.trim();
 
-  if (!cmd.startsWith("GET ")) return;
-
-  String filename = cmd.substring(4);
-  File f = SD.open(filename);
-
-  if (!f) {
-    sdChar.notify("ERR");
+  if (cmd == "LIST") {
+    // Kick off a non-blocking directory listing; chunks sent from loop()
+    if (listActive) listRoot.close();
+    listRoot = SD.open("/");
+    listActive = true;
     return;
   }
 
-  uint8_t buf[180];
-  while (f.available()) {
-    int n = f.read(buf, sizeof(buf));
-    sdChar.notify(buf, n);
-    delay(5);
+  if (cmd.startsWith("GET ")) {
+    // Kick off a non-blocking file transfer; chunks sent from loop()
+    String filename = cmd.substring(4);
+    if (xferActive) xferFile.close();
+    xferFile = SD.open(filename);
+    if (!xferFile) {
+      sdChar.notify("ERR");
+      return;
+    }
+    xferActive = true;
+    return;
   }
 
-  sdChar.notify("EOF");
-  f.close();
+  if (cmd.startsWith("DELETE ")) {
+    String filename = cmd.substring(7);
+    if (SD.exists(filename) && SD.remove(filename)) {
+      sdChar.notify("DELETED");
+    } else {
+      sdChar.notify("ERR");
+    }
+    return;
+  }
 }
 
 // =======================
@@ -106,11 +127,12 @@ void handleControlWrite(BLEDevice central, BLECharacteristic characteristic) {
 void setup() {
   Serial.begin(115200);
   Wire.begin();
+  Wire.setClock(100000);  // 100 kHz — more resilient to bus disruption from BLE SPI activity
   pinMode(BUTTON_PIN, INPUT_PULLUP);
 
-  // IMUs
-  tcaSelect(0); mpu1.begin(); mpu1.calcOffsets();
-  tcaSelect(1); mpu2.begin(); mpu2.calcOffsets();
+  // IMUs — delay between channels so multiplexer and bus are settled before calcOffsets
+  tcaSelect(0); delay(10); mpu1.begin(); mpu1.calcOffsets();
+  tcaSelect(1); delay(10); mpu2.begin(); mpu2.calcOffsets();
 
   // SD
   if (!SD.begin(SD_CS_PIN)) {
@@ -193,8 +215,42 @@ void loop() {
   // BLE SYNC STATE
   // -----------------------
   if (state == BLE_SYNC) {
-    // BLE callbacks do the work
+    // Send one LIST entry per 20ms tick (non-blocking)
+    if (listActive && millis() - lastXferMs >= 20) {
+      lastXferMs = millis();
+      File entry = listRoot.openNextFile();
+      if (!entry) {
+        listRoot.close();
+        listActive = false;
+        sdChar.notify("EOF");
+      } else {
+        String name = entry.name();
+        entry.close();
+        if (name.startsWith("run_") && name.endsWith(".csv")) {
+          String line = "/" + name + "\n";
+          sdChar.notify((const uint8_t*)line.c_str(), line.length());
+        }
+      }
+    }
+
+    // Send one GET chunk per 20ms tick (non-blocking)
+    if (xferActive && millis() - lastXferMs >= 20) {
+      lastXferMs = millis();
+      if (xferFile.available()) {
+        uint8_t buf[180];
+        int n = xferFile.read(buf, sizeof(buf));
+        sdChar.notify(buf, n);
+      } else {
+        xferFile.close();
+        xferActive = false;
+        sdChar.notify("EOF");
+      }
+    }
+
     if (!BLE.connected()) {
+      // Clean up any in-progress transfers on disconnect
+      if (listActive) { listRoot.close(); listActive = false; }
+      if (xferActive) { xferFile.close(); xferActive = false; }
       state = IDLE;
       BLE.stopAdvertise();
     }

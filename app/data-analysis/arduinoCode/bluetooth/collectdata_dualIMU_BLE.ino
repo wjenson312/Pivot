@@ -15,6 +15,7 @@ void tcaSelect(uint8_t channel) {
   Wire.beginTransmission(TCA_ADDR);
   Wire.write(1 << channel);
   Wire.endTransmission();
+  delayMicroseconds(100);  // let channel switch settle before next I2C transaction
 }
 
 // --- BLE setup ---
@@ -23,9 +24,10 @@ BLECharacteristic imuCharacteristic("2A37", BLERead | BLENotify, 100); // 100-by
 
 void setup() {
   Serial.begin(115200);
-  while (!Serial);  // wait for Serial Monitor
+  // No while(!Serial) — sketch must run standalone without USB
 
   Wire.begin();
+  Wire.setClock(100000);  // 100 kHz — more resilient to bus disruption from BLE SPI activity
 
   // Initialize MPU1
   tcaSelect(0);
@@ -60,24 +62,28 @@ void setup() {
 }
 
 void loop() {
-  BLE.poll();  // handle BLE events
+  if (millis() - timer > 10) {  // ~100 Hz
+    timer = millis();
 
-  if (millis() - timer > 10) { // ~100 Hz
-    // Update MPU1
+    // I2C reads first — no BLE SPI activity during this window
+    unsigned long ts = micros();
     tcaSelect(0); mpu1.update();
-    // Update MPU2
     tcaSelect(1); mpu2.update();
 
-    // Prepare data string
-    String dataStr = String(micros()) + " " +
-                     String(mpu1.getAccX(), 3) + " " + String(mpu1.getAccY(), 3) + " " + String(mpu1.getAccZ(), 3) + " " +
-                     String(mpu1.getAngleX(), 2) + " " + String(mpu1.getAngleY(), 2) + " " + String(mpu1.getAngleZ(), 2) + " " +
-                     String(mpu2.getAccX(), 3) + " " + String(mpu2.getAccY(), 3) + " " + String(mpu2.getAccZ(), 3) + " " +
-                     String(mpu2.getAngleX(), 2) + " " + String(mpu2.getAngleY(), 2) + " " + String(mpu2.getAngleZ(), 2);
+    // Build packet into fixed buffer — no heap allocation
+    char buf[100];
+    snprintf(buf, sizeof(buf),
+      "%lu %.3f %.3f %.3f %.2f %.2f %.2f %.3f %.3f %.3f %.2f %.2f %.2f",
+      ts,
+      mpu1.getAccX(), mpu1.getAccY(), mpu1.getAccZ(),
+      mpu1.getAngleX(), mpu1.getAngleY(), mpu1.getAngleZ(),
+      mpu2.getAccX(), mpu2.getAccY(), mpu2.getAccZ(),
+      mpu2.getAngleX(), mpu2.getAngleY(), mpu2.getAngleZ());
 
-    // Send data over BLE
-    imuCharacteristic.setValue(dataStr.c_str()); // automatically notifies subscribed clients
-
-    timer = millis();
+    // BLE operations after I2C is complete
+    BLE.poll();
+    imuCharacteristic.setValue((uint8_t*)buf, strlen(buf));
+  } else {
+    BLE.poll();  // keep BLE alive between sensor reads
   }
 }
