@@ -20,7 +20,7 @@ void tcaSelect(uint8_t channel) {
 
 // --- BLE setup ---
 BLEService imuService("180D");                 // custom service UUID
-BLECharacteristic imuCharacteristic("2A37", BLERead | BLENotify, 100); // 100-byte buffer
+BLECharacteristic imuCharacteristic("2A37", BLERead | BLENotify, 120); // 120-byte buffer — 100 was too tight for worst-case extreme readings (106 chars), causing silent truncation
 
 void setup() {
   Serial.begin(115200);
@@ -71,7 +71,7 @@ void loop() {
     tcaSelect(1); mpu2.update();
 
     // Build packet into fixed buffer — no heap allocation
-    char buf[100];
+    char buf[120];
     snprintf(buf, sizeof(buf),
       "%lu %.3f %.3f %.3f %.2f %.2f %.2f %.3f %.3f %.3f %.2f %.2f %.2f",
       ts,

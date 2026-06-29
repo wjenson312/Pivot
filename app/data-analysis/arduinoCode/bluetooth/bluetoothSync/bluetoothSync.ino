@@ -54,6 +54,12 @@ unsigned long lastSampleMs = 0;
 unsigned long buttonPressMs = 0;
 bool buttonHeld = false;
 
+// Debounce
+bool lastRawButtonState = false;   // raw HIGH/LOW read, true = pressed
+bool stableButtonState = false;    // debounced state used by the state machine
+unsigned long lastDebounceMs = 0;
+const unsigned long DEBOUNCE_MS = 30;
+
 // =======================
 // NON-BLOCKING FILE TRANSFER
 // =======================
@@ -76,17 +82,54 @@ void tcaSelect(uint8_t ch) {
 // =======================
 // UTILITIES
 // =======================
+void setState(DeviceState newState) {
+  state = newState;
+  switch (state) {
+    case IDLE:      Serial.println("STATE: IDLE");      break;
+    case RECORDING: Serial.println("STATE: RECORDING"); break;
+    case BLE_SYNC:  Serial.println("STATE: BLE_SYNC");  break;
+  }
+}
+
 String nextRunFilename() {
   char name[20];
   sprintf(name, "/run_%04d.csv", runIndex++);
   return String(name);
 }
 
+// Scan existing run_NNNN.csv files so a reboot doesn't reuse (and overwrite)
+// indices from a previous session.
+void initRunIndex() {
+  File root = SD.open("/");
+  uint16_t maxIndex = 0;
+  bool found = false;
+  while (true) {
+    File entry = root.openNextFile();
+    if (!entry) break;
+    String name = entry.name();
+    entry.close();
+    if (name.startsWith("run_") && name.endsWith(".csv")) {
+      int idx = name.substring(4, name.length() - 4).toInt();
+      if (!found || idx >= maxIndex) {
+        maxIndex = idx;
+        found = true;
+      }
+    }
+  }
+  root.close();
+  runIndex = found ? maxIndex + 1 : 0;
+}
+
 // =======================
 // BLE COMMAND HANDLER
 // =======================
 void handleControlWrite(BLEDevice central, BLECharacteristic characteristic) {
-  String cmd = characteristic.value();
+  int len = characteristic.valueLength();
+  if (len > 40) len = 40;  // controlChar's declared capacity
+  char raw[41];
+  memcpy(raw, characteristic.value(), len);
+  raw[len] = '\0';
+  String cmd = String(raw);
   cmd.trim();
 
   if (cmd == "LIST") {
@@ -103,7 +146,7 @@ void handleControlWrite(BLEDevice central, BLECharacteristic characteristic) {
     if (xferActive) xferFile.close();
     xferFile = SD.open(filename);
     if (!xferFile) {
-      sdChar.notify("ERR");
+      sdChar.writeValue("ERR");
       return;
     }
     xferActive = true;
@@ -113,9 +156,9 @@ void handleControlWrite(BLEDevice central, BLECharacteristic characteristic) {
   if (cmd.startsWith("DELETE ")) {
     String filename = cmd.substring(7);
     if (SD.exists(filename) && SD.remove(filename)) {
-      sdChar.notify("DELETED");
+      sdChar.writeValue("DELETED");
     } else {
-      sdChar.notify("ERR");
+      sdChar.writeValue("ERR");
     }
     return;
   }
@@ -139,9 +182,13 @@ void setup() {
     Serial.println("SD init failed");
     while (1);
   }
+  initRunIndex();
 
   // BLE
-  BLE.begin();
+  if (!BLE.begin()) {
+    Serial.println("BLE init failed!");
+    while (1);
+  }
   BLE.setLocalName("MKR1010_MPU");
   BLE.setAdvertisedService(dataService);
   dataService.addCharacteristic(controlChar);
@@ -158,9 +205,17 @@ void loop() {
   BLE.poll();
 
   // -----------------------
-  // BUTTON HANDLING
+  // BUTTON HANDLING (debounced)
   // -----------------------
-  bool pressed = digitalRead(BUTTON_PIN) == LOW;
+  bool rawPressed = digitalRead(BUTTON_PIN) == LOW;
+  if (rawPressed != lastRawButtonState) {
+    lastDebounceMs = millis();
+    lastRawButtonState = rawPressed;
+  }
+  if (millis() - lastDebounceMs > DEBOUNCE_MS) {
+    stableButtonState = rawPressed;
+  }
+  bool pressed = stableButtonState;
 
   if (pressed && !buttonHeld) {
     buttonHeld = true;
@@ -172,17 +227,20 @@ void loop() {
     buttonHeld = false;
 
     if (held > 2000) {
-      state = BLE_SYNC;
+      if (state == RECORDING) {
+        logFile.close();  // don't leave the current run open while syncing
+      }
+      setState(BLE_SYNC);
       BLE.advertise();
     } else {
       if (state == RECORDING) {
         logFile.close();
-        state = IDLE;
+        setState(IDLE);
       } else if (state == IDLE) {
         String fname = nextRunFilename();
         logFile = SD.open(fname, FILE_WRITE);
         logFile.println("ts,ax1,ay1,az1,gx1,gy1,gz1,ax2,ay2,az2,gx2,gy2,gz2");
-        state = RECORDING;
+        setState(RECORDING);
       }
     }
   }
@@ -222,13 +280,13 @@ void loop() {
       if (!entry) {
         listRoot.close();
         listActive = false;
-        sdChar.notify("EOF");
+        sdChar.writeValue("EOF");
       } else {
         String name = entry.name();
         entry.close();
         if (name.startsWith("run_") && name.endsWith(".csv")) {
           String line = "/" + name + "\n";
-          sdChar.notify((const uint8_t*)line.c_str(), line.length());
+          sdChar.writeValue((const uint8_t*)line.c_str(), line.length());
         }
       }
     }
@@ -239,11 +297,11 @@ void loop() {
       if (xferFile.available()) {
         uint8_t buf[180];
         int n = xferFile.read(buf, sizeof(buf));
-        sdChar.notify(buf, n);
+        sdChar.writeValue(buf, n);
       } else {
         xferFile.close();
         xferActive = false;
-        sdChar.notify("EOF");
+        sdChar.writeValue("EOF");
       }
     }
 
@@ -251,7 +309,7 @@ void loop() {
       // Clean up any in-progress transfers on disconnect
       if (listActive) { listRoot.close(); listActive = false; }
       if (xferActive) { xferFile.close(); xferActive = false; }
-      state = IDLE;
+      setState(IDLE);
       BLE.stopAdvertise();
     }
   }
