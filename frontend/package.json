@@ -9,10 +9,18 @@
     "test": "node tests/smoke.test.mjs"
   },
   "dependencies": {
+    "@tabler/icons-react": "^3.46.0",
+    "@tailwindcss/postcss": "^4.3.3",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "motion": "^13.1.1",
     "next": "14.2.35",
+    "postcss": "^8.5.26",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "recharts": "2.12.7"
+    "recharts": "2.12.7",
+    "tailwind-merge": "^3.6.0",
+    "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
     "@types/node": "20.14.10",

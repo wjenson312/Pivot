@@ -1,12 +1,22 @@
 import type { MethodDefinition } from "./types";
 
-// One entry per analysis method / tab. Add new methods here as Backend +
-// Researcher deliver each cycle's content. `ready: false` renders a disabled
-// nav link with an empty-state instead of a broken page.
+// One entry per analysis method / tab — the single source of truth AppDock
+// reads to build the floating nav's sub-score items. `ready: false` would
+// mean "no page yet" (not currently used; all three ship together).
 export const METHODS_REGISTRY: MethodDefinition[] = [
   {
     id: "knee-rotation-load",
     navLabel: "Knee Rotation Load",
+    ready: true,
+  },
+  {
+    id: "range-of-motion",
+    navLabel: "Range of Motion",
+    ready: true,
+  },
+  {
+    id: "landing-mechanics",
+    navLabel: "Landing Mechanics",
     ready: true,
   },
 ];

@@ -43,3 +43,59 @@ export const KNEE_ROTATION_LOAD_RESEARCH: ResearchContent = {
   ],
   sourcePath: "/ai-agent/research/relative-tibial-femoral-rotation-rate.md",
 };
+
+// Derived view for the "Range of Motion" sub-score tab.
+// Source of truth: /ai-agent/research/athlete-training-metrics-reference.md,
+// /ai-agent/research/wearable-metrics-by-location.md
+export const RANGE_OF_MOTION_RESEARCH: ResearchContent = {
+  summary: [
+    "Range of motion (ROM) is how far your knee joint can move — the peak-to-peak swing of the relative angle between the thigh and shin sensors over a trial. It's a standard mobility screen: low ROM relative to what a joint should achieve can flag a mobility deficit or guarding around an injury; healthy, full ROM is generally the goal.",
+    "The Range of Motion Score normalizes the raw ROM (in degrees) onto a 0-100 scale against a 90° reference — the same reference the Relative Knee Load score uses for its angle branch. That reference is a provisional convention for this dataset, not a clinical norm, and will be retuned as more real trials come in.",
+  ],
+  subtopics: [
+    {
+      title: "Dual-IMU ROM tracking is validated against motion capture",
+      strength: "well-established",
+      body: "A thigh+shank IMU pair spanning the knee gets within a few degrees of goniometry/optical motion capture once calibrated, for sagittal-plane (flexion-extension) motion in particular (Seel et al. 2014; Cooper et al. 2009; Favre et al. 2008). Soft-tissue motion relative to the sensor housing is the main error source, not the sensing principle itself.",
+    },
+    {
+      title: "ROM as a mobility screen (well-established) vs. this 0-100 normalization (experimental)",
+      strength: "experimental",
+      body: "Using joint ROM to screen for mobility deficits is standard practice in sports medicine and physical therapy. Compressing that raw degree figure into a 0-100 score against a single 90° reference is this project's own simplification, not a validated clinical threshold — read it as a relative, trial-to-trial comparison, not an absolute pass/fail mobility grade.",
+    },
+    {
+      title: "A single-trial ROM number can't diagnose a deficit on its own",
+      strength: "well-established",
+      body: "Clinical ROM screening compares a joint against a healthy contralateral side, a pre-injury baseline, or normative population data — a lone number from one trial, with no comparison point, only tells you what happened in that specific movement, not whether the joint's mobility is actually restricted.",
+    },
+  ],
+  sourcePath: "/ai-agent/research/athlete-training-metrics-reference.md",
+};
+
+// Derived view for the "Landing Mechanics" sub-score tab.
+// Source of truth: /ai-agent/research/wearable-metrics-by-location.md,
+// /ai-agent/research/hardware-upgrade-strategy.md
+export const LANDING_MECHANICS_RESEARCH: ResearchContent = {
+  summary: [
+    "Landing mechanics is about how the body absorbs force when it hits the ground — a major screen for ACL injury risk, clinically assessed through things like knee valgus (inward buckling) and trunk lean on landing. Pivot's two IMUs, mounted on the thigh and shin, can't isolate those frontal-plane signals with confidence yet.",
+    "What this tab actually shows is a coarser proxy: the peak deviation from resting gravity (1g) in the tibia (shin) accelerometer during the trial — how hard an impact registered at the shin — inverted so a softer, more controlled landing scores higher. Treat this as an impact-intensity proxy, not a landing-technique assessment.",
+  ],
+  subtopics: [
+    {
+      title: "Valgus + trunk lean is the well-established clinical screen (this sensor doesn't measure it)",
+      strength: "well-established",
+      body: "Landing mechanics screening for ACL risk centers on frontal-plane knee valgus and trunk control near touchdown (Hewett et al. 2005). Thigh+shank IMU setups like Pivot's can approximate gross valgus patterns but miss the precision of 3D motion capture for the frontal-plane angles this screen actually relies on — accuracy is meaningfully lower here than for sagittal-plane (flexion) ROM.",
+    },
+    {
+      title: "Accelerometer peak magnitude as an impact-intensity proxy",
+      strength: "experimental",
+      body: "A single accelerometer's peak deviation from 1g is a rough stand-in for impact intensity, not a calibrated ground-reaction-force measurement — that would need a force plate or instrumented insole and higher sample-rate, anti-aliased accelerometer data than the current hardware collects. The team's own hardware-upgrade research already flags this: without an insole/FSR sensor, an impact feature is 'an accel transient,' not a physically grounded force signal.",
+    },
+    {
+      title: "This is a proxy, not a landing-technique assessment",
+      strength: "experimental",
+      body: "A hard peak reading here says the impact was intense; it does not say whether the knee collapsed into valgus, whether the trunk stayed controlled, or whether the landing was otherwise 'good' or 'bad' technique. Read the Landing Mechanics score as intensity, not quality, until a true frontal-plane or ground-reaction-force signal is added.",
+    },
+  ],
+  sourcePath: "/ai-agent/research/wearable-metrics-by-location.md",
+};

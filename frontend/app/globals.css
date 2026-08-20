@@ -1,3 +1,5 @@
+@import "tailwindcss";
+
 :root {
   /* Raycast-style design tokens */
   --color-void-black: #040506;
@@ -80,14 +82,19 @@ body {
 }
 
 .app-header {
-  padding: 20px 28px 16px;
+  padding: 24px 28px 20px;
   border-bottom: 1px solid var(--border);
   background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
 }
 
 .app-header__title {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
 }
 
@@ -159,46 +166,9 @@ body {
 
 .app-main {
   flex: 1;
-  padding: 0 28px 40px;
-}
-
-.tab-nav {
+  padding: 32px 28px 128px;
   display: flex;
-  gap: 2px;
-  border-bottom: 1px solid var(--border);
-  margin: 18px 0 24px;
-  overflow-x: auto;
-  padding-bottom: 8px;
-}
-
-.tab-nav__link {
-  padding: 8px 14px;
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0.008em;
-  color: var(--text-dim);
-  text-decoration: none;
-  border-radius: var(--radius-button);
-  white-space: nowrap;
-  transition: color 0.12s ease, background 0.12s ease;
-}
-
-.tab-nav__link:hover {
-  color: var(--text);
-  background: var(--panel-2);
-}
-
-.tab-nav__link--active {
-  color: var(--text);
-  background: var(--panel-2);
-  font-weight: 600;
-  box-shadow: 0 0 0 1px var(--border) inset;
-}
-
-.tab-nav__link--disabled {
-  opacity: 0.4;
-  cursor: default;
-  pointer-events: none;
+  justify-content: center;
 }
 
 .trial-picker {
@@ -223,7 +193,9 @@ body {
 .method-tab {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 24px;
+  width: 100%;
   max-width: 1080px;
 }
 
@@ -232,12 +204,20 @@ body {
   font-weight: 600;
   margin: 0 0 4px;
   color: var(--text);
+  text-align: center;
 }
 
 .method-tab__meta {
   color: var(--text-muted);
   font-size: 13px;
   margin: 0;
+  text-align: center;
+}
+
+.method-tab > .panel,
+.method-tab > .knee-health-score,
+.method-tab > .caveat-banner {
+  width: 100%;
 }
 
 .knee-health-score {
@@ -249,8 +229,10 @@ body {
 
 .knee-health-score__hero {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 22px;
+  text-align: center;
+  gap: 14px;
 }
 
 .knee-health-score__ring {
@@ -294,11 +276,17 @@ body {
 
 .knee-health-score__subscores {
   display: flex;
+  justify-content: center;
   gap: 28px;
   flex-wrap: wrap;
   margin-top: 18px;
   padding-top: 16px;
   border-top: 1px solid var(--border);
+  width: 100%;
+}
+
+.knee-health-score__subscore {
+  text-align: center;
 }
 
 .knee-health-score__subscore-label {
@@ -352,6 +340,7 @@ body {
   font-weight: 600;
   margin: 0 0 12px;
   color: var(--text);
+  text-align: center;
 }
 
 .panel p {
@@ -411,6 +400,7 @@ body {
 
 .metric-cards {
   display: flex;
+  justify-content: center;
   gap: 16px;
   flex-wrap: wrap;
 }
@@ -421,6 +411,7 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius-tile);
   padding: 14px 16px;
+  text-align: center;
 }
 
 .metric-card__label {
@@ -497,6 +488,7 @@ body {
 
 .report-field {
   font-size: 13px;
+  text-align: center;
 }
 
 .report-field__key {

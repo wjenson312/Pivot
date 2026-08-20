@@ -93,6 +93,8 @@ export interface MethodOutput {
   primarySeries: MethodSeries[];
   /** Series for the secondary/rate signal — always present, lower confidence when derived. */
   rateSeries: MethodSeries[];
+  /** Tibia accelerometer magnitude (g) over time — headline for the Landing Mechanics tab. */
+  accelMagnitudeSeries: MethodSeries[];
   summaryMetrics: SummaryMetric[];
   kneeHealthScore: KneeHealthScore;
   qualityFlags: QualityFlags;

@@ -1,83 +1,55 @@
-import type { MethodOutput, ResearchContent } from "@/lib/types";
+import type { MethodOutput, MethodSeries, ResearchContent } from "@/lib/types";
 import RotationRateChart from "@/components/RotationRateChart";
-import KneeHealthScore from "@/components/KneeHealthScore";
 
 function bandClass(band?: "low" | "moderate" | "high") {
   if (!band) return "";
   return `metric-card__band metric-card__band--${band}`;
 }
 
+type ChartSpec = { series: MethodSeries[]; label: string; unit?: string };
+
 /**
- * The ONE shared tab template used by every analysis method.
+ * The ONE shared tab template used by every analysis method/sub-score page.
  * Contains exactly three things, in order:
  *   1. Researcher's plain-language paragraph(s) for this method
  *   2. The graph(s) of Backend's output for this method
  *   3. Backend's short method report (what it measures / how derived)
+ *
+ * Callers pick which chart is the headline for their tab (e.g. angle for
+ * Range of Motion, accelerometer magnitude for Landing Mechanics) rather
+ * than this component guessing from output.primarySignal, since that field
+ * only means something for the Knee Rotation Load tab.
  */
 export default function MethodTab({
+  title,
   research,
   output,
+  headline,
+  secondary,
+  metricKeys,
 }: {
+  title: string;
   research: ResearchContent;
   output: MethodOutput;
+  headline: ChartSpec;
+  secondary?: ChartSpec | null;
+  /** Restrict output.summaryMetrics to these keys, in this order. Omit to show all. */
+  metricKeys?: string[];
 }) {
   const qf = output.qualityFlags;
-  const isEulerDerived = qf.channel_meaning === "euler_deg";
-  const isLowConfidenceChannel = qf.channel_meaning_confidence === "low";
-  const hasUnverifiedMapping = qf.segment_assignment === "UNVERIFIED";
+  const headlineUnit = headline.unit ?? headline.series[0]?.unit ?? "";
 
-  // Headline chart: prefer the primary signal (angle, when present and
-  // drift-free) per CONTRACT.md; fall back to rate when angle isn't primary.
-  const headline =
-    output.primarySignal === "relative_angle_deg" && output.primarySeries.length > 0
-      ? { series: output.primarySeries, label: "Relative knee angle", kind: "angle" as const }
-      : { series: output.rateSeries, label: "Relative knee angular rate", kind: "rate" as const };
-  const headlineUnit = headline.series[0]?.unit ?? (headline.kind === "angle" ? "deg" : "deg/s");
-
-  // Secondary series: whichever of angle/rate isn't the headline, shown as
-  // supplementary context rather than a second headline.
-  const secondary =
-    headline.kind === "angle"
-      ? { series: output.rateSeries, label: "Relative knee angular rate (secondary, lower-confidence)" }
-      : null;
+  const metrics = metricKeys
+    ? metricKeys
+        .map((k) => output.summaryMetrics.find((m) => m.key === k))
+        .filter((m): m is NonNullable<typeof m> => Boolean(m))
+    : output.summaryMetrics;
 
   return (
     <div className="method-tab">
-      <KneeHealthScore score={output.kneeHealthScore} />
-
       <div>
-        <h1>{output.methodName}</h1>
+        <h1>{title}</h1>
         <p className="method-tab__meta">Trial: {output.trialLabel}</p>
-      </div>
-
-      {/* Persistent, non-dismissible honesty banner. Always visible — an
-          athlete who saw this once should not later mistake the index for
-          a calibrated force/torque measurement. */}
-      <div className="caveat-banner">
-        <strong>This is a relative, qualitative knee-motion index — not a calibrated joint force or torque (no Nm).</strong>{" "}
-        It tells you more-vs-less and trending up-vs-down, not an absolute injury risk.
-        <ul>
-          {(isEulerDerived || isLowConfidenceChannel) && (
-            <li>
-              The rate (deg/s) readout on this trial is <strong>derived by differentiating angle
-              data</strong>, which amplifies noise — treat it as <strong>lower-confidence</strong> than
-              the angle/ROM signal.
-              {isLowConfidenceChannel && " Channel-meaning detection itself is also low-confidence for this file."}
-            </li>
-          )}
-          {hasUnverifiedMapping && (
-            <li>
-              Which sensor is femur vs. tibia is <strong>unverified</strong> for this trial (configured
-              femur_imu={qf.femur_imu}); sign/axis convention may be inverted.
-            </li>
-          )}
-          {qf.accel_static && (
-            <li>
-              Accelerometer data was <strong>frozen/static</strong> throughout this trial.
-            </li>
-          )}
-          {output.notes.map((n, i) => <li key={i}>{n}</li>)}
-        </ul>
       </div>
 
       {/* 1. Researcher's plain-language content */}
@@ -116,7 +88,7 @@ export default function MethodTab({
         ) : null}
 
         <div className="metric-cards">
-          {output.summaryMetrics.map((m) => (
+          {metrics.map((m) => (
             <div className="metric-card" key={m.key}>
               <div className="metric-card__label">{m.label}</div>
               <div className="metric-card__value">
@@ -128,16 +100,23 @@ export default function MethodTab({
           ))}
         </div>
 
-        <h2 style={{ marginTop: 20 }}>{headline.label}</h2>
-        <div className="chart-wrap">
-          <RotationRateChart series={headline.series} headlineUnit={headlineUnit} />
-        </div>
+        {headline.series.length > 0 && (
+          <>
+            <h2 style={{ marginTop: 20 }}>{headline.label}</h2>
+            <div className="chart-wrap">
+              <RotationRateChart series={headline.series} headlineUnit={headlineUnit} />
+            </div>
+          </>
+        )}
 
         {secondary && secondary.series.length > 0 && (
           <>
             <h2 style={{ marginTop: 20 }}>{secondary.label}</h2>
             <div className="chart-wrap">
-              <RotationRateChart series={secondary.series} headlineUnit={secondary.series[0]?.unit ?? "deg/s"} />
+              <RotationRateChart
+                series={secondary.series}
+                headlineUnit={secondary.unit ?? secondary.series[0]?.unit ?? ""}
+              />
             </div>
           </>
         )}

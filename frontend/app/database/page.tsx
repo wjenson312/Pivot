@@ -1,8 +1,13 @@
-import TabNav from "@/components/TabNav";
 import RunList from "@/components/RunList";
 import BleSyncPanel from "@/components/BleSyncPanel";
 import { listRuns } from "@/lib/runs-registry";
 import { getSelectedRunId } from "@/lib/selected-run";
+
+// Cookies alone force dynamic rendering, but the dashboard has been bitten
+// before by the client router cache serving a stale run's data after
+// switching runs — force this off explicitly rather than relying on it.
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 // Primary entry point for the dashboard: pick which run every Data Analysis
 // tab should render. Selection is stored as shared app state (a cookie —
@@ -13,7 +18,6 @@ export default function DatabasePage() {
 
   return (
     <>
-      <TabNav />
       <div className="method-tab">
         <div>
           <h1>Database</h1>

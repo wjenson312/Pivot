@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import ActiveRunBanner from "@/components/ActiveRunBanner";
+import AppDock from "@/components/AppDock";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
@@ -31,6 +32,7 @@ export default function RootLayout({
           </header>
           <ActiveRunBanner />
           <main className="app-main">{children}</main>
+          <AppDock />
         </div>
       </body>
     </html>

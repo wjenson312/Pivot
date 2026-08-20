@@ -40,6 +40,12 @@ interface RawBackendResult {
   notes: string[];
 }
 
+function bandFor(score: number): "low" | "moderate" | "high" {
+  if (score < 33) return "low";
+  if (score < 66) return "moderate";
+  return "high";
+}
+
 function buildSeries(
   timestamps: number[],
   raw: Record<string, number[]>,
@@ -61,6 +67,23 @@ function buildSeries(
       role: o.role,
       points: timestamps.map((t, i) => ({ t, value: raw[`${prefix}_${o.suffix}`][i] })),
     }));
+}
+
+function buildAccelSeries(
+  timestamps: number[],
+  raw: Record<string, number[]>,
+  unit: string
+): MethodSeries[] {
+  if (!raw.accel_magnitude_tibia) return [];
+  return [
+    {
+      key: "accel_magnitude_tibia",
+      label: "tibia accelerometer magnitude",
+      unit,
+      role: "dominant",
+      points: timestamps.map((t, i) => ({ t, value: raw.accel_magnitude_tibia[i] })),
+    },
+  ];
 }
 
 /**
@@ -103,6 +126,7 @@ function adapt(raw: RawBackendResult, sourceJsonPath: string): MethodOutput {
   const angleUnit = units.rel_angle ?? "deg";
   const rateUnit = units.rel_rate ?? "deg/s";
   const romUnit = units.rom_deg ?? "deg";
+  const accelUnit = units.accel_magnitude_tibia ?? "g";
 
   const kneeHealthScore: KneeHealthScore = {
     value: sm.knee_health_score === null || sm.knee_health_score === undefined ? null : Number(sm.knee_health_score),
@@ -131,10 +155,39 @@ function adapt(raw: RawBackendResult, sourceJsonPath: string): MethodOutput {
     ],
   };
 
-  // rotation_load_index / relative_knee_load_score is headlined by the Knee
-  // Health Score hero above, so it's left out of this generic diagnostics
-  // grid to avoid showing the same number twice.
+  // Full set of cards across all three sub-score tabs; each page picks the
+  // subset relevant to it via MethodTab's `metricKeys` prop.
   const summaryMetrics: SummaryMetric[] = [
+    {
+      key: "relative_knee_load_score",
+      label: "Relative Knee Load",
+      value: Number(sm.relative_knee_load_score ?? sm.rotation_load_index ?? 0),
+      unit: "/100",
+      band: bandFor(Number(sm.relative_knee_load_score ?? sm.rotation_load_index ?? 0)),
+    },
+    {
+      key: "peak_rel_rate_dps",
+      label: "Peak relative rate",
+      value: Number(sm.peak_rel_rate_dps ?? 0),
+      unit: rateUnit,
+    },
+    {
+      key: "mean_active_rate_dps",
+      label: "Mean active rate",
+      value: Number(sm.mean_active_rate_dps ?? 0),
+      unit: rateUnit,
+    },
+    {
+      key: "range_of_motion_score",
+      label: "Range of Motion Score",
+      value: sm.range_of_motion_score === null || sm.range_of_motion_score === undefined
+        ? null
+        : Number(sm.range_of_motion_score),
+      unit: "/100",
+      band: sm.range_of_motion_score === null || sm.range_of_motion_score === undefined
+        ? undefined
+        : bandFor(Number(sm.range_of_motion_score)),
+    },
     {
       key: "rom_deg",
       label: "Range of motion (ROM)",
@@ -151,16 +204,21 @@ function adapt(raw: RawBackendResult, sourceJsonPath: string): MethodOutput {
       unit: angleUnit,
     },
     {
-      key: "peak_rel_rate_dps",
-      label: "Peak relative rate",
-      value: Number(sm.peak_rel_rate_dps ?? 0),
-      unit: rateUnit,
+      key: "landing_mechanics_score",
+      label: "Landing Mechanics Score",
+      value: sm.landing_mechanics_score === null || sm.landing_mechanics_score === undefined
+        ? null
+        : Number(sm.landing_mechanics_score),
+      unit: "/100",
+      band: sm.landing_mechanics_score === null || sm.landing_mechanics_score === undefined
+        ? undefined
+        : bandFor(Number(sm.landing_mechanics_score)),
     },
     {
-      key: "mean_active_rate_dps",
-      label: "Mean active rate",
-      value: Number(sm.mean_active_rate_dps ?? 0),
-      unit: rateUnit,
+      key: "peak_impact_g",
+      label: "Peak impact",
+      value: sm.peak_impact_g === null || sm.peak_impact_g === undefined ? null : Number(sm.peak_impact_g),
+      unit: "g",
     },
   ].filter((m) => m.value !== null) as SummaryMetric[];
 
@@ -191,6 +249,7 @@ function adapt(raw: RawBackendResult, sourceJsonPath: string): MethodOutput {
     primarySignal,
     primarySeries: buildSeries(raw.timestamps, raw.series, "rel_angle", angleUnit),
     rateSeries: buildSeries(raw.timestamps, raw.series, "rel_rate", rateUnit),
+    accelMagnitudeSeries: buildAccelSeries(raw.timestamps, raw.series, accelUnit),
     summaryMetrics,
     kneeHealthScore,
     qualityFlags,
