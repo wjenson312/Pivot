@@ -13,10 +13,11 @@ SPK/
 │   └── test_knee_rotation_load.py
 ├── frontend/                 # Next.js dashboard that renders backend outputs
 ├── data/cycle-1/             # Raw IMU trial CSVs collected so far
-├── research/                 # Plain-language + literature grounding per method
-├── docs/                     # Build summaries / direction notes
-├── critique/                 # Cross-team review notes per cycle
-├── tests/report.md           # Rolled-up backend + frontend test results
+├── ai-agent/                 # Non-code artifacts from the AI-agent-driven dev process
+│   ├── research/                 #   Plain-language + literature grounding per method
+│   ├── docs/                     #   Build summaries / direction notes
+│   ├── critique/                 #   Cross-team review notes per cycle
+│   └── tests/report.md           #   Rolled-up backend + frontend test results
 └── app/                      # Arduino firmware + data-collection/analysis scripts
     ├── data-analysis/
     │   ├── arduinoCode/           # Sketches for the MKR1010 + dual MPU6050 rig
@@ -36,8 +37,9 @@ npm install
 npm run dev
 ```
 
-Visit `http://localhost:3000` — it redirects to the first ready method
-(`/methods/knee-rotation-load`).
+Visit `http://localhost:3000` — it redirects to the `/database` tab, where you
+pick a run before viewing its analysis under a method tab (e.g.
+`/methods/knee-rotation-load`).
 
 ## Running the backend analysis
 

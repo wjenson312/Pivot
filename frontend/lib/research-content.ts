@@ -1,7 +1,7 @@
 import type { ResearchContent } from "./types";
 
 // Derived view of Researcher's brief for the "Knee Rotation Load" method.
-// Source of truth: /research/relative-tibial-femoral-rotation-rate.md
+// Source of truth: /ai-agent/research/relative-tibial-femoral-rotation-rate.md
 // We never edit that file — this is a hand-curated copy of its key content
 // shaped for the shared MethodTab template.
 export const KNEE_ROTATION_LOAD_RESEARCH: ResearchContent = {
@@ -41,5 +41,5 @@ export const KNEE_ROTATION_LOAD_RESEARCH: ResearchContent = {
       body: "Estimating tibial translation by double-integrating accelerometer signals is known to be unreliable — integration compounds bias/noise into rapidly growing position error (Woodman 2007). This is the methodological reason, independent of this dataset's frozen-accelerometer artifact, to scope cycle 1 to rotation rate rather than translation.",
     },
   ],
-  sourcePath: "/research/relative-tibial-femoral-rotation-rate.md",
+  sourcePath: "/ai-agent/research/relative-tibial-femoral-rotation-rate.md",
 };

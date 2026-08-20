@@ -5,7 +5,7 @@ Derives the knee's cardinal axes (flexion-extension, internal/external
 rotation, ab/adduction) from a dedicated calibration recording, instead of
 knee_rotation_load.py's per-trial "whichever raw sensor axis moved most"
 guess (`dominant_axis = max(axes, key=std)`) and hand-set `femur_imu`/`sign`
-arguments. See research/sleeve-calibration-protocol.md for why/what-movement,
+arguments. See ai-agent/research/sleeve-calibration-protocol.md for why/what-movement,
 and the plan this implements for the engineering design.
 
 Input: a `calib_*.csv` recorded by bluetoothSync.ino's CALIBRATING state —
@@ -39,7 +39,7 @@ whichever IMU shows more gyro variance during FLEX is the tibia.
 Scope limit: this calibrates axis directions + segment identity + gyro
 bias, NOT an absolute "0 deg = full extension" angle zero — bluetoothSync.ino
 logs true gyro rates, not fused Euler angles, so there is no absolute angle
-to baseline here. See research/sleeve-calibration-protocol.md.
+to baseline here. See ai-agent/research/sleeve-calibration-protocol.md.
 
 Output: a session-level calibration profile JSON — NOT a CONTRACT.md-shaped
 per-trial result (no timestamps/series to plot). Consumed by

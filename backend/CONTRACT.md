@@ -127,4 +127,4 @@ optionally consume (via `imu_common.load_calibration_profile` /
 `imu_common.apply_calibration`) to replace hand-set `femur_imu`/`sign` and
 the per-trial variance-picked `dominant_axis` with values derived from an
 actual calibration recording — see the `calibration_*` quality-flag fields
-above and `research/sleeve-calibration-protocol.md`.
+above and `ai-agent/research/sleeve-calibration-protocol.md`.
