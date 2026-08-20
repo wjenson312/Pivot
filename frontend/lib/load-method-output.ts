@@ -3,6 +3,7 @@ import path from "node:path";
 import type {
   ChannelMeaning,
   ChannelMeaningConfidence,
+  KneeHealthScore,
   MethodOutput,
   MethodSeries,
   PrimarySignal,
@@ -37,12 +38,6 @@ interface RawBackendResult {
   summary_metrics: Record<string, number | string | null>;
   quality_flags: Record<string, unknown>;
   notes: string[];
-}
-
-function bandFor(index: number): "low" | "moderate" | "high" {
-  if (index < 33) return "low";
-  if (index < 66) return "moderate";
-  return "high";
 }
 
 function buildSeries(
@@ -105,19 +100,41 @@ function adapt(raw: RawBackendResult, sourceJsonPath: string): MethodOutput {
   const primarySignal: PrimarySignal =
     sm.primary_signal === "relative_rate_dps" ? "relative_rate_dps" : "relative_angle_deg";
 
-  const index = Number(sm.rotation_load_index ?? 0);
   const angleUnit = units.rel_angle ?? "deg";
   const rateUnit = units.rel_rate ?? "deg/s";
   const romUnit = units.rom_deg ?? "deg";
 
+  const kneeHealthScore: KneeHealthScore = {
+    value: sm.knee_health_score === null || sm.knee_health_score === undefined ? null : Number(sm.knee_health_score),
+    subScores: [
+      {
+        key: "relative_knee_load",
+        label: "Relative Knee Load",
+        value: sm.relative_knee_load_score === null || sm.relative_knee_load_score === undefined
+          ? null
+          : Number(sm.relative_knee_load_score),
+      },
+      {
+        key: "range_of_motion",
+        label: "Range of Motion",
+        value: sm.range_of_motion_score === null || sm.range_of_motion_score === undefined
+          ? null
+          : Number(sm.range_of_motion_score),
+      },
+      {
+        key: "landing_mechanics",
+        label: "Landing Mechanics",
+        value: sm.landing_mechanics_score === null || sm.landing_mechanics_score === undefined
+          ? null
+          : Number(sm.landing_mechanics_score),
+      },
+    ],
+  };
+
+  // rotation_load_index / relative_knee_load_score is headlined by the Knee
+  // Health Score hero above, so it's left out of this generic diagnostics
+  // grid to avoid showing the same number twice.
   const summaryMetrics: SummaryMetric[] = [
-    {
-      key: "rotation_load_index",
-      label: "Knee Motion / Load Index",
-      value: index,
-      unit: units.rotation_load_index ?? "/100",
-      band: bandFor(index),
-    },
     {
       key: "rom_deg",
       label: "Range of motion (ROM)",
@@ -175,6 +192,7 @@ function adapt(raw: RawBackendResult, sourceJsonPath: string): MethodOutput {
     primarySeries: buildSeries(raw.timestamps, raw.series, "rel_angle", angleUnit),
     rateSeries: buildSeries(raw.timestamps, raw.series, "rel_rate", rateUnit),
     summaryMetrics,
+    kneeHealthScore,
     qualityFlags,
     notes: raw.notes ?? [],
     report: {
@@ -182,7 +200,9 @@ function adapt(raw: RawBackendResult, sourceJsonPath: string): MethodOutput {
         "The relative knee angle (and, secondarily, angular rate) between the tibia (shin) and " +
         "femur (thigh) IMUs — how far/fast the knee joint itself is bending or rotating, isolated " +
         "from whole-limb orientation. Reported as range of motion (ROM), peak relative angle, peak " +
-        "and mean active rate, and a 0-100 Knee Motion / Load Index.",
+        "and mean active rate, and a 0-100 Knee Motion / Load Index — one of three inputs (alongside " +
+        "a range-of-motion score and a landing-mechanics impact proxy) rolled into the Knee Health " +
+        "Score shown at the top of this tab.",
       howDerived:
         "Per axis, each segment's fused Euler angle is unwrapped across the +-180 deg discontinuity, " +
         "then the relative angle is sign * (tibia - femur), baseline-zeroed to the quiet start. This " +

@@ -1,5 +1,6 @@
 import type { MethodOutput, ResearchContent } from "@/lib/types";
 import RotationRateChart from "@/components/RotationRateChart";
+import KneeHealthScore from "@/components/KneeHealthScore";
 
 function bandClass(band?: "low" | "moderate" | "high") {
   if (!band) return "";
@@ -42,6 +43,8 @@ export default function MethodTab({
 
   return (
     <div className="method-tab">
+      <KneeHealthScore score={output.kneeHealthScore} />
+
       <div>
         <h1>{output.methodName}</h1>
         <p className="method-tab__meta">Trial: {output.trialLabel}</p>

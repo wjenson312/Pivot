@@ -176,6 +176,85 @@ body {
   margin: 0;
 }
 
+.knee-health-score {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px 24px;
+}
+
+.knee-health-score__hero {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+
+.knee-health-score__ring {
+  flex: 0 0 auto;
+}
+
+.knee-health-score__ring-value {
+  font-size: 26px;
+  font-weight: 700;
+  fill: var(--text);
+}
+
+.knee-health-score__ring-unit {
+  font-size: 10.5px;
+  fill: var(--text-dim);
+}
+
+.knee-health-score__label {
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.knee-health-score__desc {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  max-width: 480px;
+  line-height: 1.5;
+}
+
+.knee-health-score__nodata {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  color: var(--warn-text);
+  max-width: 480px;
+  line-height: 1.5;
+}
+
+.knee-health-score__subscores {
+  display: flex;
+  gap: 28px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.knee-health-score__subscore-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.knee-health-score__subscore-value {
+  font-size: 17px;
+  font-weight: 700;
+  margin-top: 3px;
+}
+
+.knee-health-score__subscore-unit {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-dim);
+  margin-left: 2px;
+}
+
 .caveat-banner {
   background: var(--warn-bg);
   border: 1px solid var(--warn-border);

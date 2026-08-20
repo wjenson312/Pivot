@@ -66,6 +66,18 @@ export interface SummaryMetric {
   band?: "low" | "moderate" | "high";
 }
 
+export interface KneeHealthSubScore {
+  key: "relative_knee_load" | "range_of_motion" | "landing_mechanics";
+  label: string;
+  value: number | null;
+}
+
+export interface KneeHealthScore {
+  /** 0-100 weighted composite, or null when a required sub-score is unavailable. */
+  value: number | null;
+  subScores: KneeHealthSubScore[];
+}
+
 export interface MethodReport {
   whatItMeasures: string;
   howDerived: string;
@@ -82,6 +94,7 @@ export interface MethodOutput {
   /** Series for the secondary/rate signal — always present, lower confidence when derived. */
   rateSeries: MethodSeries[];
   summaryMetrics: SummaryMetric[];
+  kneeHealthScore: KneeHealthScore;
   qualityFlags: QualityFlags;
   notes: string[];
   report: MethodReport;
