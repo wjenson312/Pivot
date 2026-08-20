@@ -14,10 +14,53 @@
 enum DeviceState {
   IDLE,
   RECORDING,
-  BLE_SYNC
+  BLE_SYNC,
+  CALIBRATING
 };
 
 DeviceState state = IDLE;
+
+// =======================
+// SLEEVE CALIBRATION
+// =======================
+// Guided calibration sequence — see research/sleeve-calibration-protocol.md.
+// Each row: {step code (also written into the CSV's calib_step column),
+// Serial-printed instruction, how long this step runs before auto-advancing}.
+// A flat table (not a nested rep-loop) keeps the non-blocking state-machine
+// logic in loop() simple — just walk the array by index.
+struct CalibStep {
+  const char* code;
+  const char* instruction;
+  unsigned long durationMs;
+};
+
+const CalibStep calibSteps[] = {
+  { "STAND",   "Stand still, knee straight",                  5000 },
+  { "FLEX",    "Bend and straighten your knee, thigh still",  8000 },
+  { "INT_ROT", "Rotate your shin inward",                     3000 },
+  { "NEUTRAL", "Return to center, pause",                     1500 },
+  { "EXT_ROT", "Rotate your shin outward",                     3000 },
+  { "INT_ROT", "Rotate your shin inward",                      3000 },
+  { "NEUTRAL", "Return to center, pause",                       1500 },
+  { "EXT_ROT", "Rotate your shin outward",                      3000 },
+  { "INT_ROT", "Rotate your shin inward",                       3000 },
+  { "NEUTRAL", "Return to center, pause",                        1500 },
+  { "EXT_ROT", "Rotate your shin outward",                       3000 },
+  { "INT_ROT", "Rotate your shin inward",                        3000 },
+  { "NEUTRAL", "Return to center, pause",                         1500 },
+  { "EXT_ROT", "Rotate your shin outward",                        3000 },
+  { "INT_ROT", "Rotate your shin inward",                         3000 },
+  { "NEUTRAL", "Return to center, pause",                          1500 },
+  { "EXT_ROT", "Rotate your shin outward",                         3000 },
+  { "DONE",    "Calibration complete",                             0 },
+};
+const int NUM_CALIB_STEPS = sizeof(calibSteps) / sizeof(calibSteps[0]);
+
+int calibStepIndex = 0;
+int calibPrintedStepIndex = -1;      // last step index we printed the instruction for
+unsigned long calibStepStartMs = 0;
+unsigned long calibLastCountdownMs = 0;
+uint16_t calibRunIndex = 0;
 
 // =======================
 // IMUs
@@ -85,9 +128,10 @@ void tcaSelect(uint8_t ch) {
 void setState(DeviceState newState) {
   state = newState;
   switch (state) {
-    case IDLE:      Serial.println("STATE: IDLE");      break;
-    case RECORDING: Serial.println("STATE: RECORDING"); break;
-    case BLE_SYNC:  Serial.println("STATE: BLE_SYNC");  break;
+    case IDLE:        Serial.println("STATE: IDLE");        break;
+    case RECORDING:   Serial.println("STATE: RECORDING");   break;
+    case BLE_SYNC:     Serial.println("STATE: BLE_SYNC");    break;
+    case CALIBRATING: Serial.println("STATE: CALIBRATING"); break;
   }
 }
 
@@ -97,12 +141,20 @@ String nextRunFilename() {
   return String(name);
 }
 
-// Scan existing run_NNNN.csv files so a reboot doesn't reuse (and overwrite)
-// indices from a previous session.
+String calibNextRunFilename() {
+  char name[22];
+  sprintf(name, "/calib_%04d.csv", calibRunIndex++);
+  return String(name);
+}
+
+// Scan existing run_NNNN.csv and calib_NNNN.csv files so a reboot doesn't
+// reuse (and overwrite) indices from a previous session.
 void initRunIndex() {
   File root = SD.open("/");
   uint16_t maxIndex = 0;
   bool found = false;
+  uint16_t maxCalibIndex = 0;
+  bool foundCalib = false;
   while (true) {
     File entry = root.openNextFile();
     if (!entry) break;
@@ -114,10 +166,17 @@ void initRunIndex() {
         maxIndex = idx;
         found = true;
       }
+    } else if (name.startsWith("calib_") && name.endsWith(".csv")) {
+      int idx = name.substring(6, name.length() - 4).toInt();
+      if (!foundCalib || idx >= maxCalibIndex) {
+        maxCalibIndex = idx;
+        foundCalib = true;
+      }
     }
   }
   root.close();
   runIndex = found ? maxIndex + 1 : 0;
+  calibRunIndex = foundCalib ? maxCalibIndex + 1 : 0;
 }
 
 // =======================
@@ -226,7 +285,23 @@ void loop() {
     unsigned long held = millis() - buttonPressMs;
     buttonHeld = false;
 
-    if (held > 2000) {
+    if (held > 6000) {
+      // Long-long hold: start the guided sleeve calibration sequence.
+      // See research/sleeve-calibration-protocol.md for the movements.
+      if (state == RECORDING) {
+        logFile.close();  // don't leave a regular run open while calibrating
+      }
+      String fname = calibNextRunFilename();
+      logFile = SD.open(fname, FILE_WRITE);
+      logFile.println(
+        "arduino_time_s,imu1_acc_x,imu1_acc_y,imu1_acc_z,imu1_gx,imu1_gy,imu1_gz,"
+        "imu2_acc_x,imu2_acc_y,imu2_acc_z,imu2_gx,imu2_gy,imu2_gz,calib_step");
+      calibStepIndex = 0;
+      calibPrintedStepIndex = -1;
+      calibStepStartMs = millis();
+      Serial.print("CALIBRATION START: "); Serial.println(fname);
+      setState(CALIBRATING);
+    } else if (held > 2000) {
       if (state == RECORDING) {
         logFile.close();  // don't leave the current run open while syncing
       }
@@ -270,6 +345,67 @@ void loop() {
   }
 
   // -----------------------
+  // CALIBRATING STATE
+  // -----------------------
+  if (state == CALIBRATING) {
+    const CalibStep& step = calibSteps[calibStepIndex];
+
+    // Print the instruction once per step, and a 1s countdown while active —
+    // this IS the calibration "UI": no frontend, just Serial Monitor prints.
+    if (calibStepIndex != calibPrintedStepIndex) {
+      calibPrintedStepIndex = calibStepIndex;
+      calibLastCountdownMs = millis();
+      if (step.durationMs > 0) {  // DONE (durationMs == 0) gets its own message below
+        Serial.print("STEP "); Serial.print(calibStepIndex + 1);
+        Serial.print("/"); Serial.print(NUM_CALIB_STEPS - 1);
+        Serial.print(": "); Serial.println(step.instruction);
+      }
+    }
+
+    unsigned long elapsed = millis() - calibStepStartMs;
+
+    if (step.durationMs == 0) {
+      // DONE: finalize and return to IDLE.
+      logFile.close();
+      Serial.println("CALIBRATION COMPLETE — long-press to BLE-sync and review.");
+      setState(IDLE);
+    } else {
+      if (millis() - calibLastCountdownMs >= 1000 && elapsed < step.durationMs) {
+        calibLastCountdownMs = millis();
+        unsigned long remainingS = (step.durationMs - elapsed + 999) / 1000;
+        Serial.print("  "); Serial.print(remainingS); Serial.println("s remaining...");
+      }
+
+      // Sample at the same 100Hz cadence as RECORDING.
+      if (millis() - lastSampleMs >= 10) {
+        lastSampleMs = millis();
+        tcaSelect(0); mpu1.update();
+        tcaSelect(1); mpu2.update();
+
+        logFile.print(micros() / 1000000.0, 6); logFile.print(",");
+        logFile.print(mpu1.getAccX(),3); logFile.print(",");
+        logFile.print(mpu1.getAccY(),3); logFile.print(",");
+        logFile.print(mpu1.getAccZ(),3); logFile.print(",");
+        logFile.print(mpu1.getGyroX(),3); logFile.print(",");
+        logFile.print(mpu1.getGyroY(),3); logFile.print(",");
+        logFile.print(mpu1.getGyroZ(),3); logFile.print(",");
+        logFile.print(mpu2.getAccX(),3); logFile.print(",");
+        logFile.print(mpu2.getAccY(),3); logFile.print(",");
+        logFile.print(mpu2.getAccZ(),3); logFile.print(",");
+        logFile.print(mpu2.getGyroX(),3); logFile.print(",");
+        logFile.print(mpu2.getGyroY(),3); logFile.print(",");
+        logFile.print(mpu2.getGyroZ(),3); logFile.print(",");
+        logFile.println(step.code);
+      }
+
+      if (elapsed >= step.durationMs) {
+        calibStepIndex++;
+        calibStepStartMs = millis();
+      }
+    }
+  }
+
+  // -----------------------
   // BLE SYNC STATE
   // -----------------------
   if (state == BLE_SYNC) {
@@ -284,7 +420,9 @@ void loop() {
       } else {
         String name = entry.name();
         entry.close();
-        if (name.startsWith("run_") && name.endsWith(".csv")) {
+        bool isRun = name.startsWith("run_") && name.endsWith(".csv");
+        bool isCalib = name.startsWith("calib_") && name.endsWith(".csv");
+        if (isRun || isCalib) {
           String line = "/" + name + "\n";
           sdChar.writeValue((const uint8_t*)line.c_str(), line.length());
         }

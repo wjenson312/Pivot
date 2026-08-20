@@ -50,9 +50,21 @@ Present only when `channel_meaning == "euler_deg"` (fused-angle source):
 - `rel_angle_dominant` — dominant-axis relative angle (deg)
 - `rel_angle_magnitude` — vector magnitude of relative angle (deg)
 
+Present only when `quality_flags.calibration_applied == true` (a sleeve
+calibration profile was supplied to `analyze_file`/`compute`):
+- `rel_rate_flexion`, `rel_rate_rotation`, `rel_rate_ab_adduction` — relative
+  rate (deg/s) projected onto the calibration's anatomical axes, in addition
+  to the raw x/y/z series above
+- `rel_angle_flexion`, `rel_angle_rotation`, `rel_angle_ab_adduction` — same,
+  for relative angle (deg), only when also `channel_meaning == "euler_deg"`
+
 Frontend: prefer plotting `rel_angle_dominant` (deg) as the headline when
 present (it is drift-free); otherwise plot `rel_rate_dominant` (deg/s).
-`summary_metrics.primary_signal` tells you which.
+`summary_metrics.primary_signal` tells you which. When
+`quality_flags.calibration_applied` is true, `rel_rate_dominant`/
+`rel_angle_dominant` are the calibrated **rotation**-axis series (the axis
+this metric cares about, fixed by calibration) rather than whichever raw
+axis happened to move most in that trial.
 
 ## `summary_metrics` (render as cards)
 - `primary_signal` — `"relative_angle_deg"` or `"relative_rate_dps"` (which is headline)
@@ -62,7 +74,9 @@ present (it is drift-free); otherwise plot `rel_rate_dominant` (deg/s).
 - `mean_active_rate_dps` — mean relative rate over the active window (deg/s)
 - `rotation_load_index` — 0-100 unitless **relative** Knee Motion/Load Index
   (ROM-normalised for angle data; peak-rate-normalised for rate data)
-- `dominant_axis` — `"x"` | `"y"` | `"z"`
+- `dominant_axis` — `"x"` | `"y"` | `"z"` (variance-picked, uncalibrated), or
+  `"rotation"` when `quality_flags.calibration_applied == true` (fixed by
+  the sleeve calibration instead of picked per-trial)
 
 ## `quality_flags` (render as a caveats banner)
 - `accel_static` (bool) — accelerometer columns frozen for the whole file
@@ -79,9 +93,17 @@ present (it is drift-free); otherwise plot `rel_rate_dominant` (deg/s).
 - `active_window_s` (number) — duration of the detected motion window
 - `drift_residual_dps` (number) — quiet-baseline rate drift start-vs-end
 - `drift_bounded` (bool) — only claimed true for genuine gyro-rate data
-- `segment_assignment` — `"UNVERIFIED"` (femur/tibia mapping not confirmed)
-- `femur_imu`, `tibia_imu` (int) — assumed assignment (configurable)
+- `segment_assignment` — `"UNVERIFIED"` (hand-set `femur_imu`, unconfirmed) |
+  `"confirmed"` (read from a supplied sleeve calibration profile)
+- `femur_imu`, `tibia_imu` (int) — assumed assignment (configurable), or the
+  calibration-derived assignment when `calibration_applied` is true
 - `sign` (int) — sign convention applied (configurable)
+- `calibration_applied` (bool) — whether a sleeve calibration profile
+  (`backend/sleeve_calibration.py` output) was supplied
+- `calibration_source` (string | null) — calibration profile's source
+  filename, when applied
+- `calibration_confidence` (string | null) — the calibration profile's own
+  `"high"`/`"medium"`/`"low"` confidence, carried through when applied
 
 ## Cross-trial comparability
 Do **not** compare raw cumulative quantities across trials of different length.
@@ -93,3 +115,16 @@ trial-length differences are visible.
 ## What this is / is NOT
 Relative, qualitative knee-motion proxy. **NOT** a calibrated joint torque (no
 newton-metres) and **NOT** an injury probability. See the method report.
+
+## Sleeve calibration profiles are NOT a dashboard method
+`backend/sleeve_calibration.py` produces a **session-level** JSON artifact
+(`backend/outputs/<calib_basename>.sleeve_calibration.json`) — segment
+assignment, three calibrated axis vectors, gyro bias, and confidence flags.
+It deliberately does **not** follow this contract's shape: there is no
+`timestamps`/`series` (nothing to plot on a per-trial timeline), so it isn't
+rendered in its own dashboard tab. It's an *input* other analysis methods
+optionally consume (via `imu_common.load_calibration_profile` /
+`imu_common.apply_calibration`) to replace hand-set `femur_imu`/`sign` and
+the per-trial variance-picked `dominant_axis` with values derived from an
+actual calibration recording — see the `calibration_*` quality-flag fields
+above and `research/sleeve-calibration-protocol.md`.

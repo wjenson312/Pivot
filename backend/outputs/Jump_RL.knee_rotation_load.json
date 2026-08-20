@@ -2413,12 +2413,15 @@
     "segment_assignment": "UNVERIFIED",
     "femur_imu": 1,
     "tibia_imu": 2,
-    "sign": 1
+    "sign": 1,
+    "calibration_applied": false,
+    "calibration_source": null,
+    "calibration_confidence": null
   },
   "notes": [
     "Relative/qualitative knee-motion proxy from differencing the two segment IMUs \u2014 NOT a calibrated joint torque (no Nm) and NOT an injury probability.",
-    "Femur/tibia assignment is UNVERIFIED (femur_imu=1); confirm with the physical sleeve. Sign is configurable (sign param).",
     "Channel meaning resolved as 'euler_deg' (confidence=high; magnitude heuristic said 'euler_deg').",
+    "Femur/tibia assignment is UNVERIFIED (femur_imu=1); confirm with the physical sleeve. Sign is configurable (sign param).",
     "These columns are fused Euler ANGLES (deg) \u2014 the BLE logger mislabels them '_g*' but the firmware (collectdata_dualIMU_BLE.ino) sends getAngleX/Y/Z. PRIMARY signal is the relative knee ANGLE / ROM (deg), which needs no integration and is drift-free. A relative RATE (deg/s) is also provided by differentiating the angle, but that amplifies noise \u2014 treat rate as LOWER-CONFIDENCE.",
     "WARNING: this file shows little/no real movement (accel frozen and/or angle/gyro channels nearly static). Metrics are near-zero and NOT a valid movement recording \u2014 likely a capture/hardware issue to confirm with the tester."
   ]

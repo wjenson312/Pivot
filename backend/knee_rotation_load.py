@@ -72,6 +72,16 @@ import os
 from dataclasses import dataclass, field
 from typing import Optional
 
+from imu_common import (
+    apply_calibration,
+    count_leading_frozen,
+    load_calibration_profile,
+    load_csv,
+    unwrap_deg,
+    _diff_dt,
+    _std,
+)
+
 
 CONTRACT_VERSION = "1"
 # For fused-angle (euler_deg) data the primary signal is the relative knee
@@ -80,7 +90,6 @@ CONTRACT_VERSION = "1"
 METHOD_NAME = "relative_tibial_femoral_knee_motion"
 
 # --- detection / processing thresholds (documented constants) ---------------
-FROZEN_EPS = 1e-9          # two samples "identical" if abs diff below this
 STATIC_STD_DPS = 1.5       # per-axis std below this over whole file => no motion
 ANGLE_RANGE_DEG = 90.0     # if any g-channel spans more than this, treat as angle(deg)
 ACTIVE_THRESH_FRAC = 0.15  # active-window threshold = frac of peak |omega_rel|
@@ -115,52 +124,11 @@ class Result:
 
 
 # ---------------------------------------------------------------------------
-# Loading
-# ---------------------------------------------------------------------------
-def load_csv(path: str) -> dict:
-    """Read a dual-IMU CSV into column lists of floats. Raises on missing cols."""
-    cols: dict = {}
-    with open(path, newline="") as fh:
-        reader = csv.DictReader(fh)
-        required = {
-            "arduino_time_s",
-            "imu1_gx", "imu1_gy", "imu1_gz",
-            "imu2_gx", "imu2_gy", "imu2_gz",
-        }
-        if not required.issubset(reader.fieldnames or []):
-            missing = required - set(reader.fieldnames or [])
-            raise ValueError(
-                f"{os.path.basename(path)} missing required columns: {sorted(missing)}. "
-                "This module expects the dual-IMU layout (imu1_*/imu2_*)."
-            )
-        for row in reader:
-            for k, v in row.items():
-                try:
-                    cols.setdefault(k, []).append(float(v))
-                except (TypeError, ValueError):
-                    cols.setdefault(k, []).append(math.nan)
-    return cols
-
-
-# ---------------------------------------------------------------------------
 # Data-quality detection
 # ---------------------------------------------------------------------------
-def count_leading_frozen(values: list) -> int:
-    """Number of leading samples equal to the first value (BLE-init freeze)."""
-    if not values:
-        return 0
-    n = 1
-    while n < len(values) and abs(values[n] - values[0]) <= FROZEN_EPS:
-        n += 1
-    return n
-
-
-def _std(xs: list) -> float:
-    xs = [x for x in xs if not math.isnan(x)]
-    if len(xs) < 2:
-        return 0.0
-    m = sum(xs) / len(xs)
-    return math.sqrt(sum((x - m) ** 2 for x in xs) / len(xs))
+# load_csv, count_leading_frozen, and _std now live in imu_common.py, shared
+# with sleeve_calibration.py (and any future analysis method) — imported
+# above, kept as module-level names here so existing call sites are unchanged.
 
 
 def detect_channel_meaning_heuristic(cols: dict) -> str:
@@ -209,43 +177,10 @@ def channel_meaning_for_file(filename: str) -> Optional[str]:
     return FILE_PROVENANCE.get(os.path.basename(filename))
 
 
-def unwrap_deg(values: list) -> list:
-    """
-    Unwrap a sequence of angles in degrees across the +/-180 discontinuity so
-    that consecutive differences reflect true rotation, not a 360-deg jump.
-    NaNs are passed through unchanged.
-    """
-    if not values:
-        return values
-    out = list(values)
-    offset = 0.0
-    for i in range(1, len(out)):
-        if math.isnan(out[i]) or math.isnan(values[i - 1]):
-            continue
-        d = values[i] - values[i - 1]
-        if d > 180.0:
-            offset -= 360.0
-        elif d < -180.0:
-            offset += 360.0
-        out[i] = values[i] + offset
-    return out
-
-
 # ---------------------------------------------------------------------------
 # Core computation
 # ---------------------------------------------------------------------------
-def _diff_dt(t: list) -> list:
-    """Per-sample dt using actual timestamps; first dt back-filled from second."""
-    dt = [0.0] * len(t)
-    for i in range(1, len(t)):
-        d = t[i] - t[i - 1]
-        dt[i] = d if d > 0 else 0.0
-    if len(t) > 1:
-        # fill any nonpositive (including index 0) with median positive dt
-        pos = [d for d in dt if d > 0]
-        med = sorted(pos)[len(pos) // 2] if pos else 0.0
-        dt = [d if d > 0 else med for d in dt]
-    return dt
+# unwrap_deg and _diff_dt now live in imu_common.py — see note above.
 
 
 def compute(
@@ -254,19 +189,34 @@ def compute(
     sign: int = 1,
     channel_meaning: Optional[str] = None,
     provenance: Optional[str] = None,
+    calibration: Optional[dict] = None,
 ) -> Result:
     """
     Compute the relative tibial-femoral angular-velocity index.
 
     femur_imu: which IMU index (1 or 2) is mounted on the femur. The other is
                assumed tibia. UNVERIFIED in the data — caller/tester must confirm.
+               Ignored (calibration's segment_assignment wins) when
+               `calibration` is provided.
     sign:      +1 or -1 applied to omega_rel; lets the tester orient the sign
-               convention without re-deriving.
+               convention without re-deriving. Ignored when `calibration` is
+               provided (calibration doesn't currently derive a sign, so the
+               caller's value is still used in that case — see compute() body).
     channel_meaning: forces "euler_deg" or "gyro_rate_dps". If None, resolved
                from `provenance` (preferred) then a magnitude heuristic.
     provenance: provenance-derived channel meaning (from firmware/filename), the
                RELIABLE source. The magnitude heuristic is only a cross-check.
+    calibration: a loaded sleeve_calibration.py profile dict (see
+               imu_common.load_calibration_profile). When given, femur/tibia
+               assignment comes from its segment_assignment instead of the
+               femur_imu argument, per-axis series are produced by projecting
+               onto its calibrated flexion/rotation/ab_adduction axes
+               (imu_common.apply_calibration) instead of raw sensor x/y/z, and
+               `dominant_axis` is fixed to `"rotation"` (the axis this metric
+               cares about) instead of picked per-trial by variance.
     """
+    if calibration is not None:
+        femur_imu = calibration["segment_assignment"]["femur_imu"]
     assert femur_imu in (1, 2)
     tibia_imu = 2 if femur_imu == 1 else 1
 
@@ -358,16 +308,31 @@ def compute(
         primary = rel_rate
         rx, ry, rz = rel_rate["gx"], rel_rate["gy"], rel_rate["gz"]
         mag = [math.sqrt(rx[k] ** 2 + ry[k] ** 2 + rz[k] ** 2) for k in range(n)]
-    axes = {"x": primary["gx"], "y": primary["gy"], "z": primary["gz"]}
-    dominant = max(axes, key=lambda a: _std(axes[a])) if n else "z"
-
     # rate magnitude (always available) for the rate-space metrics
     rrx, rry, rrz = rel_rate["gx"], rel_rate["gy"], rel_rate["gz"]
     rate_mag = [math.sqrt(rrx[k] ** 2 + rry[k] ** 2 + rrz[k] ** 2) for k in range(n)]
 
+    calibrated_rate = None
+    calibrated_angle = None
+    if calibration is not None:
+        # Calibration fixes which axis matters ("rotation" — the Knee
+        # Rotation Load Index's axis of interest) instead of picking
+        # whichever raw sensor channel happened to move most in this clip.
+        dominant = "rotation"
+        calibrated_rate = apply_calibration(rrx, rry, rrz, calibration)
+        dom_rate = calibrated_rate["rotation"]
+        if is_angle:
+            calibrated_angle = apply_calibration(ang_x, ang_y, ang_z, calibration)
+            dom_ang = calibrated_angle["rotation"]
+    else:
+        axes = {"x": primary["gx"], "y": primary["gy"], "z": primary["gz"]}
+        dominant = max(axes, key=lambda a: _std(axes[a])) if n else "z"
+        dom_rate = rel_rate[("g" + dominant)]
+        if is_angle:
+            dom_ang = rel_angle[("g" + dominant)]
+
     # --- ROM on the dominant relative-angle axis (deg) — headline for angle data
     if is_angle:
-        dom_ang = primary[("g" + dominant)]
         rom_deg = (max(dom_ang) - min(dom_ang)) if dom_ang else 0.0
         peak_abs_angle = max((abs(a) for a in dom_ang), default=0.0)
     else:
@@ -408,11 +373,20 @@ def compute(
     notes = [
         "Relative/qualitative knee-motion proxy from differencing the two segment "
         "IMUs — NOT a calibrated joint torque (no Nm) and NOT an injury probability.",
-        f"Femur/tibia assignment is UNVERIFIED (femur_imu={femur_imu}); confirm with "
-        "the physical sleeve. Sign is configurable (sign param).",
         f"Channel meaning resolved as '{channel_meaning}' "
         f"(confidence={channel_meaning_confidence}; magnitude heuristic said '{heuristic}').",
     ]
+    if calibration is not None:
+        notes.append(
+            f"Femur/tibia assignment CONFIRMED via sleeve calibration "
+            f"(femur_imu={femur_imu}); dominant_axis fixed to 'rotation' by the "
+            "calibration's derived axes instead of picked per-trial by variance."
+        )
+    else:
+        notes.append(
+            f"Femur/tibia assignment is UNVERIFIED (femur_imu={femur_imu}); confirm with "
+            "the physical sleeve. Sign is configurable (sign param)."
+        )
     if is_angle:
         notes.append(
             "These columns are fused Euler ANGLES (deg) — the BLE logger mislabels them "
@@ -440,16 +414,30 @@ def compute(
     # --- series: always expose relative rate; expose relative angle when we have it
     series = {
         "rel_rate_x": rrx, "rel_rate_y": rry, "rel_rate_z": rrz,
-        "rel_rate_dominant": rel_rate[("g" + dominant)],
+        "rel_rate_dominant": dom_rate,
         "rel_rate_magnitude": rate_mag,
     }
     if is_angle:
         series.update({
             "rel_angle_x": rel_angle["gx"], "rel_angle_y": rel_angle["gy"],
             "rel_angle_z": rel_angle["gz"],
-            "rel_angle_dominant": rel_angle[("g" + dominant)],
+            "rel_angle_dominant": dom_ang,
             "rel_angle_magnitude": mag,
         })
+    if calibrated_rate is not None:
+        # Calibrated series alongside the raw x/y/z ones — flexion and
+        # ab_adduction are exposed too, not just the dominant rotation axis.
+        series.update({
+            "rel_rate_flexion": calibrated_rate["flexion"],
+            "rel_rate_rotation": calibrated_rate["rotation"],
+            "rel_rate_ab_adduction": calibrated_rate["ab_adduction"],
+        })
+        if calibrated_angle is not None:
+            series.update({
+                "rel_angle_flexion": calibrated_angle["flexion"],
+                "rel_angle_rotation": calibrated_angle["rotation"],
+                "rel_angle_ab_adduction": calibrated_angle["ab_adduction"],
+            })
 
     summary_metrics = {
         "primary_signal": "relative_angle_deg" if is_angle else "relative_rate_dps",
@@ -474,10 +462,13 @@ def compute(
         "active_window_s": round(active_window_s, 3),
         "drift_residual_dps": round(drift_residual, 3),
         "drift_bounded": bool(drift_bounded),
-        "segment_assignment": "UNVERIFIED",
+        "segment_assignment": "confirmed" if calibration is not None else "UNVERIFIED",
         "femur_imu": femur_imu,
         "tibia_imu": tibia_imu,
         "sign": sign,
+        "calibration_applied": calibration is not None,
+        "calibration_source": (calibration or {}).get("source_file"),
+        "calibration_confidence": (calibration or {}).get("quality_flags", {}).get("calibration_confidence"),
     }
 
     return Result(
@@ -504,12 +495,15 @@ def analyze_file(
     femur_imu: int = 1,
     sign: int = 1,
     channel_meaning: Optional[str] = None,
+    calibration_path: Optional[str] = None,
 ) -> Result:
     cols = load_csv(path)
     prov = channel_meaning_for_file(path)
+    calibration = load_calibration_profile(calibration_path) if calibration_path else None
     res = compute(
         cols, femur_imu=femur_imu, sign=sign,
         channel_meaning=channel_meaning, provenance=prov,
+        calibration=calibration,
     )
     res.source_file = os.path.basename(path)
     return res
