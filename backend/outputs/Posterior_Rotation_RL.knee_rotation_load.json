@@ -7,7 +7,12 @@
     "rel_angle": "deg",
     "rel_rate": "deg/s",
     "rom_deg": "deg",
-    "rotation_load_index": "unitless_0_100"
+    "rotation_load_index": "unitless_0_100",
+    "relative_knee_load_score": "unitless_0_100",
+    "range_of_motion_score": "unitless_0_100",
+    "peak_impact_g": "g",
+    "landing_mechanics_score": "unitless_0_100",
+    "knee_health_score": "unitless_0_100"
   },
   "timestamps": [
     0.0,
@@ -2636,6 +2641,11 @@
     "peak_rel_rate_dps": 1.019,
     "mean_active_rate_dps": 0.0,
     "rotation_load_index": 0.29,
+    "relative_knee_load_score": 0.29,
+    "range_of_motion_score": 0.29,
+    "peak_impact_g": null,
+    "landing_mechanics_score": null,
+    "knee_health_score": null,
     "dominant_axis": "z"
   },
   "quality_flags": {
@@ -2665,6 +2675,8 @@
     "Channel meaning resolved as 'euler_deg' (confidence=high; magnitude heuristic said 'euler_deg').",
     "Femur/tibia assignment is UNVERIFIED (femur_imu=1); confirm with the physical sleeve. Sign is configurable (sign param).",
     "These columns are fused Euler ANGLES (deg) \u2014 the BLE logger mislabels them '_g*' but the firmware (collectdata_dualIMU_BLE.ino) sends getAngleX/Y/Z. PRIMARY signal is the relative knee ANGLE / ROM (deg), which needs no integration and is drift-free. A relative RATE (deg/s) is also provided by differentiating the angle, but that amplifies noise \u2014 treat rate as LOWER-CONFIDENCE.",
-    "WARNING: this file shows little/no real movement (accel frozen and/or angle/gyro channels nearly static). Metrics are near-zero and NOT a valid movement recording \u2014 likely a capture/hardware issue to confirm with the tester."
+    "WARNING: this file shows little/no real movement (accel frozen and/or angle/gyro channels nearly static). Metrics are near-zero and NOT a valid movement recording \u2014 likely a capture/hardware issue to confirm with the tester.",
+    "Landing mechanics score is a coarse peak-impact-magnitude proxy from the tibia accelerometer (softer landing = higher score) \u2014 it does NOT capture knee valgus or trunk lean, the frontal-plane signals landing-mechanics screens actually care about (see ai-agent/research/wearable-metrics-by-location.md). Knee Health Score is a weighted composite (40% relative knee load, 30% range of motion, 30% landing mechanics) \u2014 a relative proxy, like its components, NOT a clinical or validated injury-risk score.",
+    "Knee Health Score is null: at least one sub-score is unavailable for this trial (needs usable, non-frozen accelerometer data for landing mechanics, and angle-type data with a real ROM for the range-of-motion sub-score)."
   ]
 }

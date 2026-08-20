@@ -55,7 +55,9 @@ def test_contract_shape():
                 "series", "summary_metrics", "quality_flags", "notes"):
         check(key in d, f"top-level key '{key}' present")
     for k in ("primary_signal", "rotation_load_index", "dominant_axis",
-              "peak_rel_rate_dps"):
+              "peak_rel_rate_dps", "relative_knee_load_score",
+              "range_of_motion_score", "peak_impact_g",
+              "landing_mechanics_score", "knee_health_score"):
         check(k in res.summary_metrics, f"summary_metrics has '{k}'")
     for k in ("channel_meaning", "usable_motion", "segment_assignment",
               "n_samples", "femur_imu"):
@@ -110,6 +112,43 @@ def test_known_movement_direction():
           "dynamic ROM >> static ROM")
 
 
+def test_knee_health_score_real_movement():
+    print("[test] Knee Health Score computed and weighted correctly on real movement")
+    res = krl.analyze_file(os.path.join(ROOT, "MPU_BothIMUs_20251205_155322.csv"))
+    sm = res.summary_metrics
+    check(sm["relative_knee_load_score"] == sm["rotation_load_index"],
+          "relative_knee_load_score mirrors rotation_load_index (already 0-100)")
+    check(0.0 <= sm["range_of_motion_score"] <= 100.0,
+          f"range_of_motion_score within 0..100: {sm['range_of_motion_score']}")
+    check(sm["peak_impact_g"] is not None and sm["peak_impact_g"] >= 0.0,
+          f"peak_impact_g is a non-negative g value: {sm['peak_impact_g']}")
+    check(sm["landing_mechanics_score"] is not None and 0.0 <= sm["landing_mechanics_score"] <= 100.0,
+          f"landing_mechanics_score within 0..100: {sm['landing_mechanics_score']}")
+    check(sm["knee_health_score"] is not None and 0.0 <= sm["knee_health_score"] <= 100.0,
+          f"knee_health_score within 0..100: {sm['knee_health_score']}")
+    expected = (
+        krl.KNEE_HEALTH_WEIGHT_LOAD * sm["relative_knee_load_score"]
+        + krl.KNEE_HEALTH_WEIGHT_ROM * sm["range_of_motion_score"]
+        + krl.KNEE_HEALTH_WEIGHT_LANDING * sm["landing_mechanics_score"]
+    )
+    check(abs(sm["knee_health_score"] - round(expected, 2)) < 0.02,
+          f"knee_health_score matches the weighted formula: {sm['knee_health_score']} ~= {expected:.2f}")
+
+
+def test_knee_health_score_null_on_dead_data():
+    print("[test] Knee Health Score is null (not silently scored) on frozen/no-motion trials")
+    for fname in ("Jump_RL.csv", "Anterior_Rotation_RL.csv",
+                  "Posterior_Rotation_RL.csv", "Tibial_Translation_RL.csv"):
+        res = krl.analyze_file(os.path.join(ROOT, fname))
+        sm = res.summary_metrics
+        check(sm["landing_mechanics_score"] is None,
+              f"{fname}: landing_mechanics_score is null (accel frozen)")
+        check(sm["knee_health_score"] is None,
+              f"{fname}: knee_health_score is null (a required sub-score is missing)")
+        check(sm["relative_knee_load_score"] is not None and sm["range_of_motion_score"] is not None,
+              f"{fname}: the other two sub-scores still compute (near-zero, not null)")
+
+
 def test_unwrap_helper():
     print("[test] Euler unwrap removes the +-180 wrap")
     wrapped = [170.0, 175.0, -179.0, -174.0]   # crosses +180 -> -180
@@ -122,7 +161,8 @@ def test_unwrap_helper():
 def main():
     for t in (test_no_nan_inf_and_lengths, test_contract_shape,
               test_plausible_ranges_real_movement, test_static_file_flagged,
-              test_known_movement_direction, test_unwrap_helper):
+              test_known_movement_direction, test_knee_health_score_real_movement,
+              test_knee_health_score_null_on_dead_data, test_unwrap_helper):
         t()
     print(f"\n{_checks - len(_failures)}/{_checks} checks passed.")
     if _failures:

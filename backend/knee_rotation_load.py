@@ -95,6 +95,15 @@ ANGLE_RANGE_DEG = 90.0     # if any g-channel spans more than this, treat as ang
 ACTIVE_THRESH_FRAC = 0.15  # active-window threshold = frac of peak |omega_rel|
 ACTIVE_MIN_DPS = 5.0       # ...but at least this many deg/s to count as "active"
 DRIFT_TOL_DPS = 2.0        # quiet-baseline rate residual tolerance for drift gate
+REF_LANDING_IMPACT_G = 4.0  # provisional peak dynamic-accel reference for a "hard" landing;
+                             # retune once real jump/landing trials exist (same status as
+                             # REF_ROM_DEG/REF_PEAK_DPS below — see knee_rotation_load_REPORT.md)
+
+# Knee Health Score weights: relative knee load counts slightly more than ROM
+# or landing mechanics, which are weighted equally. Must sum to 1.0.
+KNEE_HEALTH_WEIGHT_LOAD = 0.4
+KNEE_HEALTH_WEIGHT_ROM = 0.3
+KNEE_HEALTH_WEIGHT_LANDING = 0.3
 
 
 @dataclass
@@ -359,6 +368,54 @@ def compute(
     else:
         rotation_load_index = max(0.0, min(100.0, 100.0 * peak_rate / REF_PEAK_DPS))
 
+    # This IS already a 0-100 index (see rotation_load_index above) — Knee
+    # Health Score below uses it directly as the "relative knee load" sub-score.
+    relative_knee_load_score = rotation_load_index
+
+    # --- range of motion score (0-100) -----------------------------------------
+    # Reuses the same REF_ROM_DEG=90 reference already established for
+    # rotation_load_index's angle branch. Only meaningful when we have a real
+    # ROM figure (angle-type data); null (not zero) otherwise, same convention
+    # as rom_deg itself.
+    if is_angle and rom_deg is not None:
+        range_of_motion_score = max(0.0, min(100.0, 100.0 * rom_deg / REF_ROM_DEG))
+    else:
+        range_of_motion_score = None
+
+    # --- landing mechanics score (0-100) ----------------------------------------
+    # Simplified impact-magnitude proxy: peak deviation from the ~1g gravity
+    # baseline in the tibia (shank) IMU's resultant accelerometer magnitude,
+    # inverted so a SOFTER/more-controlled landing (lower peak impact) scores
+    # HIGHER. This does not correct for sensor orientation relative to gravity
+    # and does not capture frontal-plane knee valgus/trunk lean (see
+    # ai-agent/research/wearable-metrics-by-location.md) — it is a coarse
+    # proxy, not a validated landing-technique assessment. Null when there's
+    # no accelerometer data or the trial isn't usable motion (nothing to
+    # measure an impact against).
+    tib_acc_keys = (f"imu{tibia_imu}_acc_x", f"imu{tibia_imu}_acc_y", f"imu{tibia_imu}_acc_z")
+    has_accel = all(k in cols for k in tib_acc_keys)
+    motion_is_usable = usable_motion and not accel_static
+    peak_impact_g = None
+    landing_mechanics_score = None
+    if has_accel and motion_is_usable:
+        tib_ax, tib_ay, tib_az = axis(tibia_imu, "acc_x"), axis(tibia_imu, "acc_y"), axis(tibia_imu, "acc_z")
+        accel_mag = [math.sqrt(tib_ax[k] ** 2 + tib_ay[k] ** 2 + tib_az[k] ** 2) for k in range(n)]
+        peak_impact_g = max((abs(m - 1.0) for m in accel_mag), default=0.0)
+        landing_mechanics_score = max(0.0, min(100.0, 100.0 * (1.0 - peak_impact_g / REF_LANDING_IMPACT_G)))
+
+    # --- Knee Health Score (0-100): weighted roll-up of the three sub-scores ---
+    # Null (not partially computed) unless all three sub-scores are available —
+    # same "don't silently score incomplete data" discipline as the rest of
+    # this module (e.g. rom_deg=null on rate-only files).
+    if range_of_motion_score is not None and landing_mechanics_score is not None:
+        knee_health_score = max(0.0, min(100.0, (
+            KNEE_HEALTH_WEIGHT_LOAD * relative_knee_load_score
+            + KNEE_HEALTH_WEIGHT_ROM * range_of_motion_score
+            + KNEE_HEALTH_WEIGHT_LANDING * landing_mechanics_score
+        )))
+    else:
+        knee_health_score = None
+
     # --- drift gate (only meaningful / claimed for true rate data) ------------
     def quiet_mean(seg):
         return (sum(seg) / len(seg)) if seg else 0.0
@@ -410,6 +467,22 @@ def compute(
             "angle/gyro channels nearly static). Metrics are near-zero and NOT a valid "
             "movement recording — likely a capture/hardware issue to confirm with the tester."
         )
+    notes.append(
+        "Landing mechanics score is a coarse peak-impact-magnitude proxy from the tibia "
+        "accelerometer (softer landing = higher score) — it does NOT capture knee valgus "
+        "or trunk lean, the frontal-plane signals landing-mechanics screens actually care "
+        "about (see ai-agent/research/wearable-metrics-by-location.md). Knee Health Score "
+        f"is a weighted composite ({int(KNEE_HEALTH_WEIGHT_LOAD*100)}% relative knee load, "
+        f"{int(KNEE_HEALTH_WEIGHT_ROM*100)}% range of motion, {int(KNEE_HEALTH_WEIGHT_LANDING*100)}% "
+        "landing mechanics) — a relative proxy, like its components, NOT a clinical or "
+        "validated injury-risk score."
+    )
+    if knee_health_score is None:
+        notes.append(
+            "Knee Health Score is null: at least one sub-score is unavailable for this "
+            "trial (needs usable, non-frozen accelerometer data for landing mechanics, and "
+            "angle-type data with a real ROM for the range-of-motion sub-score)."
+        )
 
     # --- series: always expose relative rate; expose relative angle when we have it
     series = {
@@ -446,6 +519,11 @@ def compute(
         "peak_rel_rate_dps": round(peak_rate, 3),
         "mean_active_rate_dps": round(mean_active, 3),
         "rotation_load_index": round(rotation_load_index, 2),
+        "relative_knee_load_score": round(relative_knee_load_score, 2),
+        "range_of_motion_score": round(range_of_motion_score, 2) if range_of_motion_score is not None else None,
+        "peak_impact_g": round(peak_impact_g, 3) if peak_impact_g is not None else None,
+        "landing_mechanics_score": round(landing_mechanics_score, 2) if landing_mechanics_score is not None else None,
+        "knee_health_score": round(knee_health_score, 2) if knee_health_score is not None else None,
         "dominant_axis": dominant,
     }
     quality_flags = {
@@ -481,6 +559,11 @@ def compute(
             "rel_rate": "deg/s",
             "rom_deg": "deg",
             "rotation_load_index": "unitless_0_100",
+            "relative_knee_load_score": "unitless_0_100",
+            "range_of_motion_score": "unitless_0_100",
+            "peak_impact_g": "g",
+            "landing_mechanics_score": "unitless_0_100",
+            "knee_health_score": "unitless_0_100",
         },
         timestamps=[round(x, 6) for x in t],
         series={k: [round(v, 4) for v in vs] for k, vs in series.items()},

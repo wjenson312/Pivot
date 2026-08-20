@@ -20,7 +20,12 @@ plus a parallel flat `.csv` with the time series).
     "rel_angle": "deg",
     "rel_rate": "deg/s",
     "rom_deg": "deg",
-    "rotation_load_index": "unitless_0_100"
+    "rotation_load_index": "unitless_0_100",
+    "relative_knee_load_score": "unitless_0_100",
+    "range_of_motion_score": "unitless_0_100",
+    "peak_impact_g": "g",
+    "landing_mechanics_score": "unitless_0_100",
+    "knee_health_score": "unitless_0_100"
   },
   "timestamps": [ /* float seconds, baseline-zeroed to trial start */ ],
   "series": { /* see below — every array is the SAME length as timestamps */ },
@@ -74,6 +79,25 @@ axis happened to move most in that trial.
 - `mean_active_rate_dps` — mean relative rate over the active window (deg/s)
 - `rotation_load_index` — 0-100 unitless **relative** Knee Motion/Load Index
   (ROM-normalised for angle data; peak-rate-normalised for rate data)
+- `relative_knee_load_score` — identical value to `rotation_load_index`, named
+  for its role as a Knee Health Score input (see below); already 0-100, no
+  rescaling applied
+- `range_of_motion_score` — 0-100, `rom_deg` normalised against the same 90°
+  reference as `rotation_load_index`'s angle branch | `null` (angle-type data
+  only, same condition as `rom_deg`)
+- `peak_impact_g` — peak deviation from the ~1g gravity baseline in the tibia
+  IMU's resultant accelerometer magnitude (g) | `null` when no accelerometer
+  data or `usable_motion == false`
+- `landing_mechanics_score` — 0-100, `peak_impact_g` inverted and normalised
+  against a provisional 4g reference (softer landing = higher score) | `null`
+  under the same condition as `peak_impact_g`. Coarse impact-magnitude proxy
+  only — does **not** capture knee valgus or trunk lean (see
+  `ai-agent/research/wearable-metrics-by-location.md`).
+- `knee_health_score` — 0-100, weighted roll-up of the three scores above
+  (40% `relative_knee_load_score`, 30% `range_of_motion_score`, 30%
+  `landing_mechanics_score`) | `null` unless all three inputs are available.
+  Same relative/qualitative framing as its inputs — not a validated
+  clinical or injury-risk score.
 - `dominant_axis` — `"x"` | `"y"` | `"z"` (variance-picked, uncalibrated), or
   `"rotation"` when `quality_flags.calibration_applied == true` (fixed by
   the sleeve calibration instead of picked per-trial)
