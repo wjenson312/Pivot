@@ -13,7 +13,9 @@ import {
 } from "recharts";
 import type { MethodSeries } from "@/lib/types";
 
-const COLORS = ["#4cc3ff", "#7ee0a8", "#e0a87e", "#c8e07e"];
+// Dominant/headline series gets the one warm brand accent; the rest stay
+// in the achromatic-plus-supporting-wash family (see globals.css tokens).
+const COLORS = ["#ff6363", "#56c2ff", "#59d499", "#9c9c9d"];
 
 export default function RotationRateChart({
   series,
@@ -48,27 +50,33 @@ export default function RotationRateChart({
   return (
     <ResponsiveContainer width="100%" height="100%">
       <LineChart data={merged} margin={{ top: 10, right: 20, bottom: 10, left: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#2a3543" />
+        <CartesianGrid strokeDasharray="3 3" stroke="#363739" />
         <XAxis
           dataKey="t"
-          stroke="#9aa7b4"
-          tick={{ fontSize: 11 }}
-          label={{ value: "time (s)", position: "insideBottom", offset: -4, fill: "#9aa7b4", fontSize: 11 }}
+          stroke="#9c9c9d"
+          tick={{ fontSize: 11, fontFamily: "var(--font-sans)" }}
+          label={{ value: "time (s)", position: "insideBottom", offset: -4, fill: "#9c9c9d", fontSize: 11 }}
         />
         <YAxis
-          stroke="#9aa7b4"
-          tick={{ fontSize: 11 }}
+          stroke="#9c9c9d"
+          tick={{ fontSize: 11, fontFamily: "var(--font-sans)" }}
           label={{
             value: headlineUnit,
             angle: -90,
             position: "insideLeft",
-            fill: "#9aa7b4",
+            fill: "#9c9c9d",
             fontSize: 11,
           }}
         />
         <Tooltip
-          contentStyle={{ background: "#182230", border: "1px solid #2a3543", fontSize: 12 }}
-          labelStyle={{ color: "#e6edf3" }}
+          contentStyle={{
+            background: "#111214",
+            border: "1px solid #363739",
+            borderRadius: 8,
+            fontSize: 12,
+            fontFamily: "var(--font-sans)",
+          }}
+          labelStyle={{ color: "#ffffff" }}
         />
         <Legend wrapperStyle={{ fontSize: 12 }} />
         {series.map((s, i) => (
@@ -86,9 +94,9 @@ export default function RotationRateChart({
           x={peak.t}
           y={peak.value}
           r={5}
-          fill="#f2c14e"
-          stroke="#0b0f14"
-          label={{ value: "peak", position: "top", fill: "#f2c14e", fontSize: 11 }}
+          fill="#ffb166"
+          stroke="#040506"
+          label={{ value: "peak", position: "top", fill: "#ffb166", fontSize: 11 }}
         />
       </LineChart>
     </ResponsiveContainer>

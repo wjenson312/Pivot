@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import ActiveRunBanner from "@/components/ActiveRunBanner";
 import "./globals.css";
+
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
   title: "Pivot Research Dashboard",
@@ -13,11 +16,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" className={inter.variable}>
       <body>
         <div className="app-shell">
           <header className="app-header">
             <div className="app-header__title">
+              <span className="app-header__mark" aria-hidden="true" />
               <span className="app-header__brand">Pivot</span>
               <span className="app-header__subtitle">Research Dashboard</span>
             </div>
