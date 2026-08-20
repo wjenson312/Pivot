@@ -397,11 +397,16 @@ def compute(
     motion_is_usable = usable_motion and not accel_static
     peak_impact_g = None
     landing_mechanics_score = None
-    if has_accel and motion_is_usable:
+    accel_magnitude_tibia = None
+    if has_accel:
         tib_ax, tib_ay, tib_az = axis(tibia_imu, "acc_x"), axis(tibia_imu, "acc_y"), axis(tibia_imu, "acc_z")
-        accel_mag = [math.sqrt(tib_ax[k] ** 2 + tib_ay[k] ** 2 + tib_az[k] ** 2) for k in range(n)]
-        peak_impact_g = max((abs(m - 1.0) for m in accel_mag), default=0.0)
-        landing_mechanics_score = max(0.0, min(100.0, 100.0 * (1.0 - peak_impact_g / REF_LANDING_IMPACT_G)))
+        # Exposed as a series regardless of usable_motion so the Landing
+        # Mechanics tab has something to plot even for a flagged/dead trial
+        # (a flat line at ~1g visually confirms "yes, this one is frozen").
+        accel_magnitude_tibia = [math.sqrt(tib_ax[k] ** 2 + tib_ay[k] ** 2 + tib_az[k] ** 2) for k in range(n)]
+        if motion_is_usable:
+            peak_impact_g = max((abs(m - 1.0) for m in accel_magnitude_tibia), default=0.0)
+            landing_mechanics_score = max(0.0, min(100.0, 100.0 * (1.0 - peak_impact_g / REF_LANDING_IMPACT_G)))
 
     # --- Knee Health Score (0-100): weighted roll-up of the three sub-scores ---
     # Null (not partially computed) unless all three sub-scores are available —
@@ -511,6 +516,8 @@ def compute(
                 "rel_angle_rotation": calibrated_angle["rotation"],
                 "rel_angle_ab_adduction": calibrated_angle["ab_adduction"],
             })
+    if accel_magnitude_tibia is not None:
+        series["accel_magnitude_tibia"] = accel_magnitude_tibia
 
     summary_metrics = {
         "primary_signal": "relative_angle_deg" if is_angle else "relative_rate_dps",
@@ -564,6 +571,7 @@ def compute(
             "peak_impact_g": "g",
             "landing_mechanics_score": "unitless_0_100",
             "knee_health_score": "unitless_0_100",
+            "accel_magnitude_tibia": "g",
         },
         timestamps=[round(x, 6) for x in t],
         series={k: [round(v, 4) for v in vs] for k, vs in series.items()},

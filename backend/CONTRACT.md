@@ -63,6 +63,14 @@ calibration profile was supplied to `analyze_file`/`compute`):
 - `rel_angle_flexion`, `rel_angle_rotation`, `rel_angle_ab_adduction` — same,
   for relative angle (deg), only when also `channel_meaning == "euler_deg"`
 
+Present only when the tibia IMU's accelerometer columns exist in the source
+CSV (independent of `usable_motion` — present even for a flagged/dead trial,
+so the Landing Mechanics tab still has something to plot):
+- `accel_magnitude_tibia` — resultant accelerometer magnitude (g) at the
+  tibia IMU, `sqrt(acc_x^2 + acc_y^2 + acc_z^2)`; hovers near 1g (gravity)
+  at rest, deviates on impact/movement. Headline series for the Landing
+  Mechanics tab.
+
 Frontend: prefer plotting `rel_angle_dominant` (deg) as the headline when
 present (it is drift-free); otherwise plot `rel_rate_dominant` (deg/s).
 `summary_metrics.primary_signal` tells you which. When
