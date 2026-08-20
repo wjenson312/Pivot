@@ -37,9 +37,10 @@ npm install
 npm run dev
 ```
 
-Visit `http://localhost:3000` — it redirects to the `/database` tab, where you
-pick a run before viewing its analysis under a method tab (e.g.
-`/methods/knee-rotation-load`).
+Visit `http://localhost:3000` for the Home tab (Knee Health Score + insights
+for whichever run is selected). Pick a run under the Database tab, then use
+the floating nav to jump to a sub-score tab (Knee Rotation Load, Range of
+Motion, Landing Mechanics).
 
 ## Running the backend analysis
 
